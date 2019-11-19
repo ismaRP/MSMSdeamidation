@@ -12,19 +12,21 @@ from matplotlib.cm import ScalarMappable
 
 plt.style.use('seaborn-dark-palette')
 
+
+main_path = '/home/ismael/palaeoproteomics/'
 # Read radio carbon data
-sampleInfo, header = af.readSampleInfo('./data/all_samples.tsv')
+sampleInfo, header = af.readSampleInfo(main_path+'data/all_samples.tsv')
 # Read proteins to filter
-protsInfo = af.readProtList('./data/collagen.tsv')
+protsInfo = af.readProtList(main_path+'data/collagen.tsv')
 # Read halftimes and properties
-N_properties, Q_properties = af.readHalftimes('./data/N_properties.json',
-                                   './data/Q_properties.json')
+N_properties, Q_properties = af.readHalftimes(main_path+'data/N_properties.json',
+                                              main_path+'data/Q_properties.json')
 aa_properties = N_properties.copy()
 aa_properties.update(Q_properties)
 
-datapath = '/home/ismael/palaeoproteomics/datasets'
+datapath = main_path+'datasets'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
-out_dir = '/home/ismael/palaeoproteomics/out/'
+out_dir = main_path+'/out/'
 
 
 key = 'Substrate'
@@ -176,4 +178,61 @@ for r in axes:
         ax.tick_params(labelsize='x-large', length=4)
 
 plt.savefig(out_dir + 'PCA_comb.png')
+plt.close()
+
+
+## PLOT BY AGE ONLY BONE
+print('Plotting bone samples')
+
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
+bone_samples = ['Bone', 'Tar seep bone']
+markers =  ['.', '^']
+ages = merged_deamid_mat.Ydata['Age'].astype('float')
+ages_b = ages[np.logical_or(Yvect=='Bone', Yvect=='Tar seep bone')]
+known = ages_b != -1
+# Logscale ages
+ages_b[known] = np.log(ages_b[known]+1)
+# Remap color
+htcm = plt.get_cmap("cool")
+htnorm = plt.Normalize(np.min(ages_b[known]), np.max(ages_b[known]))
+htsm = ScalarMappable(norm=htnorm, cmap=htcm)
+htsm.set_array([])
+for s, m in zip(bone_samples, markers):
+    mask = Yvect == s
+    D_s = D_imp_pca[mask,:]
+    ages_s = ages[Yvect==s]
+    known_s = ages_s != -1
+    ages_s[known_s] = np.log(ages_s[known_s]+1)
+    # Plot unknown age
+    axes[0].scatter(D_s[~known_s,0], D_s[~known_s,1], c='lightgrey',
+                 alpha=0.7, marker=m)
+    axes[1].scatter(D_s[~known_s,0], D_s[~known_s,2], c='lightgrey',
+                 alpha=0.7, marker=m)
+    # Plot known age
+    axes[0].scatter(D_s[known_s,0], D_s[known_s,1], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m)
+    axes[1].scatter(D_s[known_s,0], D_s[known_s,2], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m, label=s)
+
+
+axes[1].legend(fontsize = 'x-large')
+# bbox_to_anchor=(1.13, 1.17)
+htcbar_ax = fig.add_axes([0.3, 0.93, 0.4, 0.015])
+htcbar = plt.colorbar(htsm, cax=htcbar_ax, orientation="horizontal")
+htcbar.ax.set_title(r"$\log(YBP+1)$", size='x-large')
+htcbar.ax.tick_params(labelsize='x-large', length=4)
+
+axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
+               size='x-large')
+
+for ax in axes:
+    ax.tick_params(labelsize='x-large', length=4)
+
+plt.savefig(out_dir + 'PCA_bone_tarseep.pdf', format='pdf')
 plt.close()
