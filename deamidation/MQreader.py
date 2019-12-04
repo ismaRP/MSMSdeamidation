@@ -116,6 +116,30 @@ class evidenceBatchReader():
     #             ]for i, m in enumerate(deamidRe.finditer(modseq))]
     #     return d
 
+    def __int_per_sample():
+
+
+    def __log_transform(self, folder, sample_field):
+        infile = open(folder + '/evidence.txt', 'r')
+        header = infile.readline()[:-1].split(self.sep)
+
+        headerPos = readHeader(['intensity'],
+                               ['Intensity'],
+                               header)
+        old_sample = None
+        sample_start = 0
+        intensity_list = []
+        # Collect intensities
+        for line in infile:
+            line = line[:-1]
+            line = line.split(self.sep)
+            intensity = line[headerPos['intensity']]
+            intensity = float(intensity) if intensity!='' else 0
+            intensity_list.append(intensity)
+        
+
+
+
     def __qt(self, folder, sample_field):
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
