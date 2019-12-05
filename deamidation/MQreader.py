@@ -9,11 +9,13 @@ from deamidation.accFunctions import readHeader
 class evidenceBatchReader():
 
     def __init__(self, datapath, ptm=['de'], aa=['QN'], sep='\t', byPos=False,
-                 qt=False, sf_exp=[], include=None, exclude=None):
+                 tr=None, sf_exp=[], include=None, exclude=None):
         """
         Include: only selected are analyzed
         Exclude: analyze all datasets but the ones set here
         If both include and exclude are set, only include will be used.
+
+        tr: ['qt', 'lognorm', 'log']
         """
         if datapath[-1] != '/':
             datapath += '/'
@@ -30,8 +32,25 @@ class evidenceBatchReader():
         self.paths = [datapath + d for d in self.datasets]
         self.sep = sep
         self.byPos = byPos
-        self.qt = qt
         self.sf_exp = sf_exp
+
+        if tr in {'qt','lognorm'}:
+            self.per_sample_tr = True
+            if tr == 'qt':
+                self.tr = tr
+                self.tr_f = self.__qt
+            elif tr = 'lognor':
+                self.tr = tr
+                self.tr_f = self.__log_norm
+        elif tr in {'log'}:
+            self.per_sample_tr = False
+            if tr == 'log':
+                self.tr = tr
+                self.tr_f = self.__log
+        elif tr is None:
+            self.tr = None
+            self.tr_f = None
+
 
     def readBatch(self):
 
@@ -116,10 +135,62 @@ class evidenceBatchReader():
     #             ]for i, m in enumerate(deamidRe.finditer(modseq))]
     #     return d
 
-    def __int_per_sample():
+    def __qt(x):
+        transformed = quantile_transform(np.reshape(x,(-1,1)),
+                                         axis=0, copy=True,
+                                         n_quantiles=len(x),
+                                         output_distribution='normal')
+        transformed = transformed.flatten()
+        transformed = transformed - np.min(transformed)
+        return(transformed)
+
+    def __log_norm(x):
+        return(np.log(x/np.sum(x)+1))
+
+    def __log(x):
+        return(np.log(x))
+
+    def __tr_per_sample(self, folder, sample_field, **kargs):
+        infile = open(folder + '/evidence.txt', 'r')
+        header = infile.readline()[:-1].split(self.sep)
+
+        headerPos = readHeader(['intensity', 'sample'],
+                               ['Intensity', sample_field],
+                               header)
+        old_sample = None
+        sample_start = 0
+        intensity_list = []
+
+        for i, line in enumerate(infile):
+            line = line[:-1]
+            line = line.split(self.sep)
+            sample_name = line[headerPos['sample']]
+            intensity = line[headerPos['intensity']]
+            intensity = float(intensity) if intensity!='' else 0
+            if sample_name == old_sample or old_sample == None:
+                intensity_list.append(intensity)
+                old_sample = sample_name
+                continue
+            else:
+
+                to_transform = intensity_list[sample_start:i]
+                transformed = transform = self.tr_f(to_transform)
+
+                intensity_list[sample_start:i] = transformed
+                intensity_list.append(intensity)
+
+                sample_start = i
+                old_sample = sample_name
+        # Transform last sample
+        to_transform = intensity_list[sample_start:i+1]
+        transformed = transform = self.tr_f(to_transform)
+
+        intensity_list[sample_start:i+1] = transformed
+        infile.close()
+        return(intensity_list)
 
 
-    def __log_transform(self, folder, sample_field):
+    def __tr_one_shot(self, folder, sample_field, **kargs):
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
 
@@ -136,55 +207,12 @@ class evidenceBatchReader():
             intensity = line[headerPos['intensity']]
             intensity = float(intensity) if intensity!='' else 0
             intensity_list.append(intensity)
-        
-
-
-
-    def __qt(self, folder, sample_field):
-        infile = open(folder + '/evidence.txt', 'r')
-        header = infile.readline()[:-1].split(self.sep)
-
-        headerPos = readHeader(['intensity', 'sample'],
-                               ['Intensity', sample_field],
-                               header)
-        old_sample = None
-        sample_start = 0
-        intensity_list = []
-        for i, line in enumerate(infile):
-            line = line[:-1]
-            line = line.split(self.sep)
-            sample_name = line[headerPos['sample']]
-            intensity = line[headerPos['intensity']]
-            intensity = float(intensity) if intensity!='' else 0
-            if sample_name == old_sample or old_sample == None:
-                intensity_list.append(intensity)
-                old_sample = sample_name
-                continue
-            else:
-
-                to_transform = intensity_list[sample_start:i]
-                transformed = quantile_transform(np.reshape(to_transform,(-1,1)),
-                                                 axis=0, copy=True,
-                                                 n_quantiles=len(to_transform),
-                                                 output_distribution='normal')
-                transformed = transformed.flatten()
-                transformed = transformed - np.min(transformed)
-                intensity_list[sample_start:i] = transformed
-                intensity_list.append(intensity)
-
-                sample_start = i
-                old_sample = sample_name
-        # Transform last sample
-        to_transform = intensity_list[sample_start:i+1]
-        transformed = quantile_transform(np.reshape(to_transform,(-1,1)),
-                                         axis=0, copy=True,
-                                         n_quantiles=len(to_transform),
-                                         output_distribution='normal')
-        transformed = transformed.flatten()
-        transformed = transformed - np.min(transformed)
-        intensity_list[sample_start:i+1] = transformed
-        infile.close()
+        intensity_list = np.array(intensity_list)
+        if self.tr is not None:
+            intensity_list = self.tr_f(intensity_list)
         return(intensity_list)
+
+
 
     def importEvidence(self, folder, intensities=[], sample_field='Raw file'):
         """
@@ -226,8 +254,14 @@ class evidenceBatchReader():
         regexM = re.compile(regexM)
         regexS = re.compile(regexS)
 
-        if self.qt == True:
-            tr_intensities = self.__qt(folder, sample_field)
+        if self.tr is not None:
+            if self.per_sample_tr:
+                tr_intensities = self.__tr_per_sample(folder, sample_field)
+            elif not self.per_sample_tr:
+                tr_intensities = self.__tr_one_shot(folder, sample_field)
+        else:
+            tr_intensities = self.__tr_one_shot(folder, sample_field)
+
 
         for i, line in enumerate(infile):
             line = line[:-1]
@@ -242,11 +276,8 @@ class evidenceBatchReader():
             length = int(length)
             evidenceID = line[headerPos['evidenceID']]
 
-            if self.qt == False:
-                intensity = line[headerPos['intensity']]
-                intensity = float(intensity) if intensity!='' else 0
-            else:
-                intensity = tr_intensities[i]
+            # Get intensity from transofrmed list
+            intensity = tr_intensities[i]
 
             peptideID = line[headerPos['peptideID']]
 
