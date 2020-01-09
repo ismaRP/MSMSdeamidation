@@ -196,7 +196,7 @@ def adjacent_values(vals, q1, q3):
 
 
 
-def calc_Ri(D, counts=None, low_counts=None, err_tol=1e-5, num_tol=0.09):
+def calc_Ri(D, counts=None, low_counts=None, log_tr=False, err_tol=1e-5, num_tol=0.09):
     M = D.shape[1]
     R = []
 
@@ -221,8 +221,10 @@ def calc_Ri(D, counts=None, low_counts=None, err_tol=1e-5, num_tol=0.09):
             D_i[mask2] = np.nan
             D_js[mask1] = np.nan
             D_js[mask2] = np.nan
-
-        R_i = np.log(1-D_i)/np.log(1-D_js)
+        if log_tr:
+            R_i = np.log(np.log(1-D_i)/np.log(1-D_js) + 1)
+        else:
+            R_i = np.log(1-D_i)/np.log(1-D_js)
         R_i = np.concatenate(R_i)
         R_i = R_i[~np.isnan(R_i)]
         if len(R_i) == 0:
@@ -309,7 +311,7 @@ def calc_rankRj(D, counts=None, low_counts=None, sort='median', err_tol=1e-5, nu
     return np.squeeze(stats.mode(rankR, 0).mode)
 
 def Rlambda_distr(trps_vs_all, trps_data, sort_by='median', path=None,
-                  base_name=None, log=False, lim_y=None):
+                  base_name=None, log=False, lim_y=None, return_pl=False):
 
     num_dims = len(trps_vs_all)
 
@@ -339,15 +341,6 @@ def Rlambda_distr(trps_vs_all, trps_data, sort_by='median', path=None,
     x_labels = [trp + '\nvs.\nAll' for trp in trps_data['tripep']]
     quartile1 = [np.nanpercentile(v, 25) for v in trps_vs_all]
     quartile3 = [np.nanpercentile(v, 75) for v in trps_vs_all]
-    # for v in trps_vs_all:
-    #     if len(v) > 0:
-    #         quartile1.append(np.percentile(v, 25))
-    #         quartile3.append(np.percentile(v, 75))
-    #     else:
-    #         quartile1.append(np.nan)
-    #         quartile3.append(np.nan)
-    # quartile1 = np.array(quartile1)
-    # quartile3 = np.array(quartile3)
 
     fig = plt.figure(figsize=(20,10), dpi=300)
     ax = fig.add_subplot(111)
@@ -355,9 +348,9 @@ def Rlambda_distr(trps_vs_all, trps_data, sort_by='median', path=None,
                           showextrema=False, showmedians=False,
                           showmeans=False, bw_method='scott')
     for pc in parts['bodies']:
-        pc.set_facecolor('#D43F3A')
+        pc.set_facecolor('lightsteelblue')
         pc.set_edgecolor('black')
-        pc.set_alpha(0.7)
+        pc.set_alpha(0.9)
 
 
     whiskers = np.array([
@@ -365,32 +358,39 @@ def Rlambda_distr(trps_vs_all, trps_data, sort_by='median', path=None,
         for sorted_array, q1, q3 in zip(trps_vs_all, quartile1, quartile3)])
     whiskersMin, whiskersMax = whiskers[:, 0], whiskers[:, 1]
     inds = np.arange(1, len(medians) + 1)
-    ax.scatter(inds, medians, marker='o', color='lightgreen', s=30, zorder=3,
+    ax.scatter(inds, medians, marker='o', color='r', s=60, zorder=4,
                label='median')
-    ax.scatter(inds, means, marker='D', color='yellow', s=40, zorder=3,
+    ax.scatter(inds, means, marker='D', color='g', s=60, zorder=4,
                label='mean')
     if sort_by == 'mode':
         xmins = [i-0.2 for i in inds]
         xmaxs = [i+0.2 for i in inds]
-        ax.hlines(modes, xmins, xmaxs, color='k', linestyle='-', lw=1)
-    ax.vlines(inds, quartile1, quartile3, color='k', linestyle='-', lw=5)
-    ax.vlines(inds, whiskersMin, whiskersMax, color='k', linestyle='-', lw=1)
-    plt.legend(facecolor='grey', fontsize='x-large')
+        ax.hlines(modes, xmins, xmaxs, color='grey',
+                  linestyle='-', lw=1)
+    ax.vlines(inds, quartile1, quartile3, color='grey',
+              linestyle='-', lw=5, alpha=1)
+    ax.vlines(inds, whiskersMin, whiskersMax, color='grey',
+              linestyle='-', lw=1, alpha=1)
+    ax.legend(fontsize='xx-large', loc=2,
+              fancybox=True, facecolor='lightgrey')
     ax.set_xticks(inds)
-    ax.set_xticklabels(x_labels, size='large')
+    ax.set_xticklabels(x_labels, size='xx-large')
     # ax.set_xlim(0.25, len(trps_data['tripep']) + 0.75)
     if lim_y is not None:
         ax.set_ylim(0, lim_y)
     if log == True:
-        ax.semilogy()
-        ax.set_ylabel(r'$\log_{10}(k_A/\k_B)$', size='xx-large')
+        ax.set_ylabel(r'$\log(k_A/k_B+1)$', size='xx-large', color='black')
     else:
-        ax.set_ylabel(r'$k_A/\k_B$', size='xx-large')
+        ax.set_ylabel(r'$k_A/\k_B$', size='xx-large', color='black')
     if path is not None and base_name is not None:
         plt.savefig(path+base_name+'_vs_all_violin.png', dpi=300, format=None)
         plt.close()
     else:
-        plt.show()
+        if return_pl:
+            return(fig)
+        else:
+            plt.show()
+
 
 
 def Rlambda_scatter(lambda_pw3D, trps_data, lambdas,

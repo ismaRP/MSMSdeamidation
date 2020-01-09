@@ -39,7 +39,7 @@ class evidenceBatchReader():
             if tr == 'qt':
                 self.tr = tr
                 self.tr_f = self.__qt
-            elif tr = 'lognor':
+            elif tr == 'lognor':
                 self.tr = tr
                 self.tr_f = self.__log_norm
         elif tr in {'log'}:
@@ -135,7 +135,7 @@ class evidenceBatchReader():
     #             ]for i, m in enumerate(deamidRe.finditer(modseq))]
     #     return d
 
-    def __qt(x):
+    def __qt(self, x):
         transformed = quantile_transform(np.reshape(x,(-1,1)),
                                          axis=0, copy=True,
                                          n_quantiles=len(x),
@@ -144,11 +144,11 @@ class evidenceBatchReader():
         transformed = transformed - np.min(transformed)
         return(transformed)
 
-    def __log_norm(x):
+    def __log_norm(self, x):
         return(np.log(x/np.sum(x)+1))
 
-    def __log(x):
-        return(np.log(x))
+    def __log(self, x):
+        return(np.log(x+1))
 
     def __tr_per_sample(self, folder, sample_field, **kargs):
         infile = open(folder + '/evidence.txt', 'r')

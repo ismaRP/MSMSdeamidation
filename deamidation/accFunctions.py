@@ -206,6 +206,7 @@ def pca(data, k):
     is decreasing, and the eigenvectors have the same order as their associated eigenvalues
     """
 
+    data = data - np.mean(data, axis=0)
     # Calculate covariance matrix
     cov_mat = np.cov(data, rowvar=False)
     # Calculate eigenvalues and eigenvectors

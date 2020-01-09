@@ -44,6 +44,7 @@ def create_deamid_mat(tripeps, D, t):
 
     return sim_mat
 
+os.chdir('/home/ismael/palaeoproteomics/')
 
 # Read halftimes and properties
 N_properties, Q_properties = af.readHalftimes('./data/N_properties.json',
@@ -54,6 +55,7 @@ aa_properties.update(Q_properties)
 datapath = '/home/ismael/palaeoproteomics/datasets'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
 out_dir = '/home/ismael/palaeoproteomics/out/'
+base_name = 'logtr'
 
 # ------------------------------------------------------------------------------
 ## Load data
@@ -63,7 +65,7 @@ sampleInfo, header = af.readSampleInfo('./data/all_samples.tsv')
 # Read proteins to filter
 protsInfo = af.readProtList('./data/collagen.tsv')
 
-reader = evidenceBatchReader(datapath, byPos=True, qt=True, sf_exp=sf_exp)
+reader = evidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
 
 data = reader.readBatch()
 
@@ -203,7 +205,7 @@ while b < bootstraps:
     spearman_values[3].append(sim_corrQ)
 
     b += 1
-    break
+
 
 spearman_values = np.array(spearman_values)
 labs = [
@@ -216,7 +218,7 @@ fig = plt.figure(figsize=(9.6, 7.2), dpi=300)
 ax = fig.add_subplot(111)
 ax.boxplot(spearman_values.T, labels = labs)
 ax.set_ylabel('Spearman\'s '+r'$\rho$')
-plt.savefig(out_dir + 'data_vs_sim/bootstrap_spearman.png')
+plt.savefig(out_dir + 'data_vs_sim/' + base_name + '_bootstrap_spearman.png')
 plt.close()
 #-------------------------------------------------------------------------------
 ## Plot histograms of deamidation for data vs simulations
@@ -227,14 +229,14 @@ rr.data_vs_sim_hist(
     sim=np.array([np.concatenate(DN)]),
     trps=['XNY'], xlabel='Deamidation',
     xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='N_D'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'N_D'
 )
 rr.data_vs_sim_hist(
     data=np.array([np.concatenate(deamid_matQ.D)]),
     sim=np.array([np.concatenate(DQ)]),
     trps=['XQY'], xlabel='Deamidation',
     xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='Q_D'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'Q_D'
 )
 
 ## Plot histograms for each tripeptide
@@ -242,13 +244,13 @@ rr.data_vs_sim_hist(
     data=deamid_matN.D, sim=DN,
     trps=deamid_matN.trps_data['tripep'],
     xlabel='Deamidation', xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='N_D_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'N_D_trps'
 )
 rr.data_vs_sim_hist(
     data=deamid_matQ.D, sim=DQ,
     trps=deamid_matQ.trps_data['tripep'],
     xlabel='Deamidation', xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='Q_D_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'Q_D_trps'
 )
 
 # ------------------------------------------------------------------------------
@@ -293,13 +295,13 @@ rr.data_vs_sim_hist(
     data=dataR_N, sim=simR_N,
     trps=deamid_matN.trps_data['tripep'],
     xlabel='R', xrange=[0, 50],
-    path=out_dir+'data_vs_sim/', base_name='N_R_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'N_R_trps'
 )
 rr.data_vs_sim_hist(
     data=dataR_Q, sim=simR_Q,
     trps=deamid_matQ.trps_data['tripep'],
     xlabel='R', xrange=[0, 50],
-    path=out_dir+'data_vs_sim/', base_name='Q_R_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'Q_R_trps'
 )
 
 # QQplots
@@ -317,17 +319,17 @@ aggr_dataR_N = [[val for v in dataR_N for val in v]]
 aggr_dataR_Q = [[val for v in dataR_Q for val in v]]
 
 rr.R_QQplot(aggr_simR_N, aggr_simR_Q, ['Simulated','Simulated'],
-            ['XNZ', 'XQZ'], out_dir+'by_tripep/', 'simXNZ_simXQZ',
+            ['XNZ', 'XQZ'], out_dir+'by_tripep/', base_name+'simXNZ_simXQZ',
             aspect='equal')
 rr.R_QQplot(aggr_dataR_N, aggr_dataR_Q, ['Data', 'Data'],
-            ['XNZ', 'XQZ'], out_dir+'by_tripep/', 'dataXNZ_dataXQZ',
+            ['XNZ', 'XQZ'], out_dir+'by_tripep/', base_name+'dataXNZ_dataXQZ',
             aspect='equal')
 
 rr.R_QQplot(aggr_simR_N, aggr_dataR_N, ['Simulated', 'Data'],
-            ['XNZ', 'XNZ'], out_dir+'by_tripep/', 'simXNZ_dataXNZ',
+            ['XNZ', 'XNZ'], out_dir+'by_tripep/', base_name+'simXNZ_dataXNZ',
             aspect='num')
 rr.R_QQplot(aggr_simR_Q, aggr_dataR_Q, ['Simulated', 'Data'],
-            ['XQZ', 'XQZ'], out_dir+'by_tripep/', 'simXQZ_dataXQZ',
+            ['XQZ', 'XQZ'], out_dir+'by_tripep/', base_name+'simXQZ_dataXQZ',
             aspect='num')
 
 # ------------------------------------------------------------------------------
@@ -363,20 +365,20 @@ rr.data_vs_sim_hist(
     data=data_rankN, sim=sim_rankN,
     trps=deamid_matN.trps_data['tripep'],
     xlabel='Rank', xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='N_rank_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'N_rank_trps'
 )
 rr.data_vs_sim_hist(
     data=data_rankQ, sim=sim_rankQ,
     trps=deamid_matQ.trps_data['tripep'],
     xlabel='Rank', xrange=None,
-    path=out_dir+'data_vs_sim/', base_name='Q_rank_trps'
+    path=out_dir+'data_vs_sim/', base_name=base_name+'Q_rank_trps'
 )
 
-QQplots
-rr.R_QQplot(sim_rankN, data_rankN, deamid_matN.trps_data,
-            out_dir+'by_tripep/rank', aspect='equal')
-rr.R_QQplot(sim_rankQ, data_rankQ, deamid_matQ.trps_data,
-            out_dir+'by_tripep/rank', aspect='equal')
+# QQplots
+# rr.R_QQplot(sim_rankN, data_rankN, deamid_matN.trps_data,
+#             out_dir+'by_tripep/rank', aspect='equal')
+# rr.R_QQplot(sim_rankQ, data_rankQ, deamid_matQ.trps_data,
+#             out_dir+'by_tripep/rank', aspect='equal')
 
 
 # ------------------------------------------------------------------------------
@@ -384,32 +386,32 @@ rr.R_QQplot(sim_rankQ, data_rankQ, deamid_matQ.trps_data,
 
 rr.Rlambda_distr(dataR_N, deamid_matN.trps_data,
                  sort_by=None, log=True,
-                 path=out_dir, base_name=fileN)
+                 path=out_dir, base_name=base_name+fileN)
 
 rr.Rlambda_distr(dataR_Q, deamid_matQ.trps_data,
                  sort_by=None, log=True,
-                 path=out_dir, base_name=fileQ)
+                 path=out_dir, base_name=base_name+fileQ)
 
 # Multiscatter plots
 dc.multiscatter(deamid_matQ, hts=lambdasQ, t='norm',
-                path=out_dir, base_name=fileQ, low_counts=4,
+                path=out_dir, base_name=base_name+fileQ, low_counts=4,
                 fontsize=10, fontpos=[0.10,0.35], reg=False)
 dc.multiscatter(deamid_matN, hts=lambdasN, t='norm',
-                path=out_dir, base_name=fileN, low_counts=4,
+                path=out_dir, base_name=base_name+fileN, low_counts=4,
                 fontsize=10, fontpos=[0.10,0.35], reg=False)
 #
 # # Calculate correlation
-corr_matQ = dc.correlation(deamid_matQ.D, deamid_matQ.trps_data,
-                           out_dir, fileQ)
-corr_matN = dc.correlation(deamid_matN.D, deamid_matN.trps_data,
-                           out_dir, fileN)
-
-grQ = dc.show_graph_with_labels(corr_matQ, 0.8, deamid_matQ.trps_data['tripep'],
-                                aa_properties, 'polarity_graham',
-                                out_dir, fileQ)
-grN = dc.show_graph_with_labels(corr_matN, 0.7, deamid_matN.trps_data['tripep'],
-                                aa_properties, 'polarity_graham',
-                                out_dir, fileN)
+# corr_matQ = dc.correlation(deamid_matQ.D, deamid_matQ.trps_data,
+#                            out_dir, base_name+fileQ)
+# corr_matN = dc.correlation(deamid_matN.D, deamid_matN.trps_data,
+#                            out_dir, base_name+fileN)
+#
+# grQ = dc.show_graph_with_labels(corr_matQ, 0.8, deamid_matQ.trps_data['tripep'],
+#                                 aa_properties, 'polarity_graham',
+#                                 out_dir, base_name+fileQ)
+# grN = dc.show_graph_with_labels(corr_matN, 0.7, deamid_matN.trps_data['tripep'],
+#                                 aa_properties, 'polarity_graham',
+#                                 out_dir, base_name+fileN)
 
 
 # By substrate
@@ -459,7 +461,7 @@ for sub in substrates:
     # Calculate relative ratio
     rr.Rlambda_distr(sub_Ri_Q, sub_deamid_matQ.trps_data,
                      sort_by=None, log=True,
-                     path=out_dir, base_name=fileQ)
+                     path=out_dir, base_name=base_name+fileQ)
     rr.Rlambda_distr(sub_Ri_N, sub_deamid_matN.trps_data,
                      sort_by=None, log=True,
-                     path=out_dir, base_name=fileN)
+                     path=out_dir, base_name=base_name+fileN)
