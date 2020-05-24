@@ -8,7 +8,6 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.font_manager import FontProperties
 import os
 import warnings
-exit()
 plt.style.use('seaborn-dark-palette')
 warnings.simplefilter("ignore")
 def sort_by_hts(halftimes, deamid_mat):

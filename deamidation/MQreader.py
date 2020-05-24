@@ -55,7 +55,7 @@ class evidenceBatchReader():
     def readBatch(self):
 
         tmp_batch = {}
-        intensities = [[] for i in range(50)]
+        intensities = [[] for i in range(60)]
         for d, p in zip(self.datasets, self.paths):
             if d in self.sf_exp:
                 tmp_batch[d], intensities = self.importEvidence(p, intensities,

@@ -54,8 +54,10 @@ class dataBatch():
         Collapses tripeptide deamidation per sample, making a weighterd average
         across the selected proteins present in proteinInfo
         {sample: {COL1A1-ANG-400: [avg.rel_deamid, counts,
-                                   norm_int, prot_name, pos,
-                                   corrected_pos],
+                                   norm_int,
+                                   prot_id, chain,
+                                   pos,
+                                   ],
                   ...,
                   },
          ...}
@@ -82,7 +84,7 @@ class dataBatch():
                     raw_pos = tripep_data[4]
                     sum_int = tripep_data[0] + tripep_data[2]
                     sum_counts = tripep_data[1] + tripep_data[3]
-                    tripep = prot_name + '-' + tripep # Attach chain
+                    tripep = chain + '-' + tripep # Attach chain
                     if sum_int != 0:
                         rel_int = tripep_data[0]/sum_int
                         if norm_type == 'range':
@@ -93,7 +95,7 @@ class dataBatch():
                             norm_fact = sum_int/sample.total_int
                         if tripep not in sampleTripeps[sample_name]:
                             sampleTripeps[sample_name][tripep]=[
-                                0, 0, 0, prot_name, raw_pos
+                                0, 0, 0, prot_name, chain, raw_pos
                             ]
                         sampleTripeps[sample_name][tripep][0] += rel_int
                         sampleTripeps[sample_name][tripep][1] += sum_counts
@@ -174,7 +176,7 @@ class deamidationMatrix():
                 if trp not in all_tripeps:
                     # [avg.rel_deamid, counts, norm_int, prot_name, pos, corrected_pos]
                     seq = trp.split('-')[1]
-                    all_tripeps[trp] = (values[3], 'NA', seq, values[4], 0)
+                    all_tripeps[trp] = (values[3], values[4], seq, values[5], 0)
         trps_data = []
         for trip, values in all_tripeps.items():
             trps_data.append(values + tuple([trip]))
@@ -185,8 +187,7 @@ class deamidationMatrix():
                                 ('tripep', 'U3'),
                                 ('position', 'i4'),
                                 ('corr_pos', 'i4'),
-                                ('string', '<U45')
-                                ])
+                                ('trp_chain', '<U20')])
         trps_data = np.sort(trps_data, 0, order=['tripep', 'prot_name', 'position'])
         return trps_data
 
@@ -509,7 +510,10 @@ class deamidationMatrix():
                 chain = chain + '1'
             trp['prot_name'] = chain
             corr_pos = trp['position'] - ch1_start
+            corr_end = ch1_end - ch1_start
             if corr_pos<0:
+                corr_pos = 0
+            if corr_pos > corr_end:
                 corr_pos = 0
             trp['corr_pos'] = corr_pos
             new_trps_data.append(trp)

@@ -196,7 +196,7 @@ def map_range(sum_int, sample_max_int, sample_min_int):
     return norm_int
 
 
-def pca(data, k):
+def pca(data, k, inv=False):
     """
     input: datamatrix. Rows must be observations while columns variables
     output:  1) the eigenvalues in a vector (numpy array) in descending order
@@ -218,7 +218,8 @@ def pca(data, k):
     sorted_evals = -sorted_evals
     # Sort eigenvectors
     sorted_evecs = evecs[:,e_index]
-
+    if inv:
+        sorted_evecs = sorted_evecs * - 1
     # Take first k eigenvectors
     evecs_red = sorted_evecs[:,0:k]
     # Change basis, using eigenvectors

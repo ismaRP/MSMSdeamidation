@@ -55,7 +55,7 @@ aa_properties.update(Q_properties)
 datapath = '/home/ismael/palaeoproteomics/datasets'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
 out_dir = '/home/ismael/palaeoproteomics/out/'
-base_name = 'logtr'
+base_name = 'logtr_nopompeii'
 
 # ------------------------------------------------------------------------------
 ## Load data
@@ -73,6 +73,12 @@ sampleTripeps = data.get_sampleTripeps(sampleInfo, protsInfo, norm_type='simple'
                                        filter=None)
 
 deamid_mat = deamidationMatrix(sampleTripeps, sampleInfo, header)
+
+# Filter out pompeii samples
+pompeii_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii'}
+filter = [False if d in pompeii_samples else True
+          for d in deamid_mat.Ydata['Dataset']]
+
 
 sums = np.sum(deamid_mat.counts, axis=0)
 maxs = np.max(deamid_mat.counts, axis=0)

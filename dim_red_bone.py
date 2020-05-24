@@ -24,7 +24,8 @@ def sort_by_lambda(properties, deamid_mat):
 
 main_path = '/home/ismael/palaeoproteomics/'
 # Read radio carbon data
-sampleInfo, header = af.readSampleInfo(main_path+'data/all_samples.tsv')
+# sampleInfo, header = af.readSampleInfo(main_path+'data/all_samples.tsv')
+sampleInfo, header = af.readSampleInfo(main_path+'data/tarseep_bone_dentalcalc_samples.tsv')
 
 # Read proteins to filter
 protsInfo = af.readProtList(main_path+'data/collagen.tsv')
@@ -37,7 +38,7 @@ aa_properties.update(Q_properties)
 datapath = main_path+'datasets'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
 out_dir = main_path+'/out/'
-base_name = 'logtr_nopompeii'
+base_name = 'logtr_bone'
 
 key = 'Substrate'
 type = 'cat'
@@ -52,12 +53,6 @@ sampleTripeps = data.get_sampleTripeps(sampleInfo, protsInfo, norm_type='simple'
 
 deamid_mat = deamidationMatrix(sampleTripeps, sampleInfo, header)
 
-# Filter out pompeii samples
-remove_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii', 'gelatine fish'}
-filter = [False if d in remove_samples else True
-          for d in deamid_mat.Ydata['Dataset']]
-
-deamid_mat = deamid_mat.filter_samples(filter)
 
 sums = np.sum(deamid_mat.counts, axis=0)
 maxs = np.max(deamid_mat.counts, axis=0)
@@ -68,16 +63,16 @@ mid_sum = np.logical_and(mid_sum, max_cond)
 tripep_mask = np.logical_or(upper_sum, mid_sum)
 deamid_mat = deamid_mat.filter_tripeps(tripep_mask)
 
-deamid_mat.correct_pos(protsInfo)
-print(
-    np.sort(deamid_mat.trps_data,
-    order=['tripep', 'prot_name', 'corr_pos'])[['tripep','corr_pos','prot_name']]
-)
-exit()
-
 merged_deamid_mat = deamid_mat.merge_by_tripep()
 # merged_deamid_mat = merged_deamid_mat.filter_tripeps(merged_deamid_mat.filter_by_pwcounts())
 
+
+# Filter out pompeii samples
+pompeii_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii'}
+filter = [False if d in pompeii_samples else True
+          for d in merged_deamid_mat.Ydata['Dataset']]
+
+merged_deamid_mat = merged_deamid_mat.filter_samples(filter)
 
 # man_rm = ['MQG', 'HQG', 'PQL', 'DNG', 'GQH', 'GNN', 'NNG']
 # man_filter = [True if trp not in man_rm else False
@@ -274,11 +269,8 @@ plt.close()
 # -------------------------------------------------------------------
 # PCA PLOTS AND REGRESSION
 
-# Set variables for plotting
 Yvect = merged_deamid_mat.Ydata['Substrate']
 Yset = set(Yvect)
-# Yset.remove('Gelatine')
-# Yset.remove('Glue')
 Yset = np.sort(list(Yset))
 
 # Map to color
@@ -292,73 +284,40 @@ for Yval in Yset:
     map_color[Yval] = keySm.to_rgba(i)
     i += 1
 
-# Set variables for subsetting bone, tar seep and dental calculus
-thermal_ages = merged_deamid_mat.Ydata['10C Thermal age'].astype('float')
-ages = merged_deamid_mat.Ydata['Age'].astype('float')
-
-mask = np.logical_or(Yvect=='Bone', Yvect=='Tar seep bone')
-mask = np.logical_or(mask, Yvect=='Dental calculus')
-
-ages_b = ages[mask]
-thermal_ages_b = thermal_ages[mask]
-known_ages = ages_b != -1
-known_thermal_ages = thermal_ages_b != -1
-
-ages_b[known_ages] = np.log(ages_b[known_ages]+1)
-thermal_ages_b[known_thermal_ages] = np.log(thermal_ages_b[known_thermal_ages]+1)
-
-# Age map color
-htcm = plt.get_cmap("cool")
-htnorm = plt.Normalize(np.min(ages_b[known_ages]),
-                       np.max(ages_b[known_ages]))
-age_sm = ScalarMappable(norm=htnorm, cmap=htcm)
-age_sm.set_array([])
-
-# Thermal age map color
-htnorm = plt.Normalize(np.min(thermal_ages_b[known_thermal_ages]),
-                       np.max(thermal_ages_b[known_thermal_ages]))
-thermal_age_sm = ScalarMappable(norm=htnorm, cmap=htcm)
-thermal_age_sm.set_array([])
 
 # -------------------------------------------------------------------
 ### REGRESSION USING PC1 on Thermal AGE WITH BONE AND
 # TAR SEEP SAMPLES
 # Get known age samples
-
-# Y = ages_b[known]
+ages = merged_deamid_mat.Ydata['10C Thermal age'].astype('float')
+mask = np.logical_or(Yvect=='Bone', Yvect=='Tar seep bone')
+mask = np.logical_or(mask, Yvect=='Dental calculus')
+ages_b = ages[mask]
+known = ages_b != -1
+Y = ages_b[known]
 # Y = np.log10(Y+1)
-# X = D_imp_pca[mask, :]
-# X = X[known, :]
-# X = np.hstack((np.ones((X.shape[0],1)), X))
-#
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-# ax.scatter(X[:,1],Y)
-# plt.show()
-#
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-# ax.scatter(X[:,2],Y)
-# plt.show()
-#
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-# ax.scatter(X[:,3],Y)
-# plt.show()
+X = D_imp_pca[mask, :]
+X = X[known, :]
+X = np.hstack((np.ones((X.shape[0],1)), X))
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.scatter(X[:,1],Y)
+plt.show()
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+ax.scatter(X[:,2],Y)
+plt.show()
 
 # reg = linear_model.LinearRegression()
 # reg.fit(X, Y)
 #
 # print(reg.score(X,Y))
-
+exit()
 # -------------------------------------------------------------------
 # COMBO PCA PLOT
 
-# Add gelatine and glue manually
-# map_color['Gelatine'] = 'blue'
-# map_color['Glue'] = 'pink'
-# Yset = np.append(Yset, 'Gelatine')
-# Yset = np.append(Yset, 'Glue')
 
 fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15,17), dpi=300)
 # axes[0,0] PC1 vs PC2 by substrate
@@ -371,12 +330,10 @@ fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15,17), dpi=300)
 
 for sub in Yset:
     mask = Yvect == sub
-    axes[0,0].scatter(D_imp_pca[mask,0], D_imp_pca[mask,1],
-                      c=[map_color[sub]]*len(D_imp_pca[mask,0]),
-                      alpha=0.7, label=sub, s=60)
-    axes[0,1].scatter(D_imp_pca[mask,0], D_imp_pca[mask,2],
-                      c=[map_color[sub]]*len(D_imp_pca[mask,0]),
-                      alpha=0.7, label=sub, s=60)
+    axes[0,0].scatter(D_imp_pca[mask,0], D_imp_pca[mask,1], c=map_color[sub],
+                 alpha=0.7, label=sub, s=60)
+    axes[0,1].scatter(D_imp_pca[mask,0], D_imp_pca[mask,2], c=map_color[sub],
+                 alpha=0.7, label=sub, s=60)
 
 axes[0,0].legend(loc=9, bbox_to_anchor=(1.13, 1.17), ncol=4, fontsize = 'xx-large')
 # fig.suptitle('PCA plot')
@@ -388,19 +345,21 @@ axes[0,1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sort
                size='x-large')
 
 ## PLOT BY AGE
+
+ages = merged_deamid_mat.Ydata['Age'].astype('float')
 known = ages != -1
 # Logscale ages
-ages[known] = np.log(ages[known]+1)
+ages[known] = np.log10(ages[known]+1)
 
 htcm = plt.get_cmap("cool")
 htnorm = plt.Normalize(np.min(ages[known]), np.max(ages[known]))
 htsm = ScalarMappable(norm=htnorm, cmap=htcm)
 htsm.set_array([])
 # plot unknown age
-axes[1,0].scatter(D_imp_pca[~known,0], D_imp_pca[~known,1], alpha=0.7,
-                  c=['lightgrey']*len(D_imp_pca[~known,0]))
-axes[1,1].scatter(D_imp_pca[~known,0], D_imp_pca[~known,2], alpha=0.7,
-                  c=['lightgrey']*len(D_imp_pca[~known,0]))
+axes[1,0].scatter(D_imp_pca[~known,0], D_imp_pca[~known,1], c='lightgrey',
+             alpha=0.7)
+axes[1,1].scatter(D_imp_pca[~known,0], D_imp_pca[~known,2], c='lightgrey',
+             alpha=0.7)
 # plot known age
 axes[1,0].scatter(D_imp_pca[known,0], D_imp_pca[known,1], c=htsm.to_rgba(ages[known]),
              alpha=0.9, s=60)
@@ -438,163 +397,148 @@ plt.close()
 
 # -------------------------------------------------------------------
 ## PLOT BY AGE ONLY BONE AND TAR SEEP
-print('Plotting bone samples by age')
+print('Plotting bone samples')
 
-# PC1 vs PC2 and PC3, color by age, shape by substrate
-fig1, axes1 = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
+fig1 = plt.figure( figsize=(15,7.5))
+ax1 = fig1.add_subplot(111)
 
-# PC1 and PC2 vs age, color and shape by substrate
-fig2, axes2 = plt.subplots(nrows=2, ncols=1, figsize=(12,12), dpi=300)
-
-bone_samples = ['Bone', 'Tar seep bone', 'Dental calculus']
-markers =  ['.', '^', 'X']
-
-
+bone_samples = ['Bone', 'Tar seep bone']
+markers =  ['.', '^']
+ages = merged_deamid_mat.Ydata['Age'].astype('float')
+ages_b = ages[np.logical_or(Yvect=='Bone', Yvect=='Tar seep bone')]
+known = ages_b != -1
+# Logscale ages
+ages_b[known] = np.log10(ages_b[known]+1)
+# Remap color
+htcm = plt.get_cmap("cool")
+htnorm = plt.Normalize(np.min(ages_b[known]), np.max(ages_b[known]))
+htsm = ScalarMappable(norm=htnorm, cmap=htcm)
+htsm.set_array([])
 for s, m in zip(bone_samples, markers):
     mask = Yvect == s
     D_s = D_imp_pca[mask,:]
     ages_s = ages[Yvect==s]
     known_s = ages_s != -1
-    # ages_s[known_s] = np.log(ages_s[known_s]+1)
+    ages_s[known_s] = np.log10(ages_s[known_s]+1)
     # Plot unknown age
-    axes1[0].scatter(D_s[~known_s,0], D_s[~known_s,1],
-                     c=['lightgrey']*len(D_s[~known_s,0]),
-                     alpha=0.7, marker=m)
-    axes1[1].scatter(D_s[~known_s,0], D_s[~known_s,2],
-                     c=['lightgrey']*len(D_s[~known_s,0]),
-                     alpha=0.7, marker=m)
+    axes[0].scatter(D_s[~known_s,0], D_s[~known_s,1], c='lightgrey',
+                 alpha=0.7, marker=m)
+    axes[1].scatter(D_s[~known_s,0], D_s[~known_s,2], c='lightgrey',
+                 alpha=0.7, marker=m)
     # Plot known age
-    axes1[0].scatter(D_s[known_s,0], D_s[known_s,1],
-                     c=age_sm.to_rgba(ages_s[known_s]),
-                     alpha=0.9, s=80, marker=m)
-    axes1[1].scatter(D_s[known_s,0], D_s[known_s,2],
-                     c=age_sm.to_rgba(ages_s[known_s]),
-                     alpha=0.9, s=80, marker=m, label=s)
-    # Plot PCs vs age
-    axes2[0].scatter(ages_s[known_s], D_s[known_s,0], s=80,
-                     marker=m, alpha=0.9, label=s)
-    axes2[1].scatter(ages_s[known_s], D_s[known_s,1], s=80,
-                     marker=m, alpha=0.9)
+    axes[0].scatter(D_s[known_s,0], D_s[known_s,1], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m)
+    axes[1].scatter(D_s[known_s,0], D_s[known_s,2], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m, label=s)
+    ax1.scatter(ages_s[known_s], D_s[known_s,0], s=80,
+                marker=m, alpha=0.9, label=s)
 
-# Legends
-axes1[1].legend(fontsize = 'xx-large')
-axes2[0].legend(fontsize='xx-large')
+
+
+axes[1].legend(fontsize = 'x-large')
+ax1.legend(fontsize='x-large')
 # bbox_to_anchor=(1.13, 1.17)
-htcbar_ax = fig1.add_axes([0.3, 0.93, 0.4, 0.015])
-htcbar = plt.colorbar(age_sm, cax=htcbar_ax, orientation="horizontal")
-htcbar.ax.set_title(r"$\log(YBP+1)$", size='xx-large')
-htcbar.ax.tick_params(labelsize='xx-large', length=4)
+htcbar_ax = fig.add_axes([0.3, 0.93, 0.4, 0.015])
+htcbar = plt.colorbar(htsm, cax=htcbar_ax, orientation="horizontal")
+htcbar.ax.set_title(r"$\log10(YBP+1)$", size='x-large')
+htcbar.ax.tick_params(labelsize='x-large', length=4)
 
-# Axis
-axes1[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
-               size='xx-large')
+axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
+               size='x-large')
+ax1.set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+ax1.set_xlabel('log10(YBP+1)', size='x-large')
+for ax in axes:
+    ax.tick_params(labelsize='x-large', length=4)
+# Revert y axes in pc1 vs age
+ax1.set_ylim(ax1.get_ylim()[::-1])
 
-axes2[0].set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-                    size='xx-large')
-axes2[1].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-                    size='x-large')
-axes2[1].set_xlabel(r'$\log(YBP+1)$', size='xx-large')
+axes[0].grid(False)
+axes[1].grid(False)
+ax1.grid(False)
 
-# Revert y axes in pc vs age
-axes2[0].set_ylim(axes2[0].get_ylim()[::-1])
-axes2[1].set_ylim(axes2[1].get_ylim()[::-1])
+fig.savefig(out_dir + base_name + '_PCA_bone_tarseep.png', format='png')
+fig1.savefig(out_dir + base_name + '_PC1_Age_bone_tarseep.png', format='png')
 
-for ax1, ax2 in zip(axes1, axes2):
-    ax1.grid(False)
-    ax1.tick_params(labelsize='xx-large', length=4)
-    ax2.grid(False)
-    ax2.tick_params(labelsize='xx-large', length=4)
-fig1.set_tight_layout(True)
-fig2.set_tight_layout(True)
-fig1.savefig(out_dir + base_name + '_PCA_bone_tarseep.png', format='png')
-plt.close()
-fig2.savefig(out_dir + base_name + '_PC_1_2_Age_bone_tarseep.png', format='png')
 plt.close()
 
 # -------------------------------------------------------------------
 ## PLOT BY THERMAL AGE ONLY BONE AND TAR SEEP
 print('Plotting bone samples by thermal ages')
 
-# PC1 vs PC2 and PC3, color by age, shape by substrate
-fig1, axes1 = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
+# PC 1, 2 and 3 by thermal age
+fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
+# PC vs thermal age
+fig1 = plt.figure( figsize=(15,7.5))
+ax1 = fig1.add_subplot(111)
 
-# PC1 and PC2 vs age, color and shape by substrate
-fig2, axes2 = plt.subplots(nrows=2, ncols=1, figsize=(12,12), dpi=300)
-
-bone_samples = ['Bone', 'Tar seep bone', 'Dental calculus']
-markers =  ['.', '^', 'X']
-
-
+bone_samples = ['Bone', 'Tar seep bone']
+markers =  ['.', '^']
+ages = merged_deamid_mat.Ydata['10C Thermal age'].astype('float')
+ages_b = ages[np.logical_or(Yvect=='Bone', Yvect=='Tar seep bone')]
+known = ages_b != -1
+# Logscale ages
+ages_b[known] = np.log10(ages_b[known]+1)
+# Remap color
+htcm = plt.get_cmap("cool")
+htnorm = plt.Normalize(np.min(ages_b[known]), np.max(ages_b[known]))
+htsm = ScalarMappable(norm=htnorm, cmap=htcm)
+htsm.set_array([])
 for s, m in zip(bone_samples, markers):
     mask = Yvect == s
     D_s = D_imp_pca[mask,:]
-    # Get the thermal ages
-    ages_s = thermal_ages[Yvect==s]
+    ages_s = ages[Yvect==s]
     known_s = ages_s != -1
-    ages_s[known_s] = np.log(ages_s[known_s]+1)
+    ages_s[known_s] = np.log10(ages_s[known_s]+1)
     # Plot unknown age
-    axes1[0].scatter(D_s[~known_s,0], D_s[~known_s,1],
-                     c=['lightgrey']*len(D_s[~known_s,0]),
-                     alpha=0.7, marker=m)
-    axes1[1].scatter(D_s[~known_s,0], D_s[~known_s,2],
-                     c=['lightgrey']*len(D_s[~known_s,0]),
-                     alpha=0.7, marker=m)
+    axes[0].scatter(D_s[~known_s,0], D_s[~known_s,1], c='lightgrey',
+                 alpha=0.7, marker=m)
+    axes[1].scatter(D_s[~known_s,0], D_s[~known_s,2], c='lightgrey',
+                 alpha=0.7, marker=m)
     # Plot known age
-    axes1[0].scatter(D_s[known_s,0], D_s[known_s,1],
-                     c=thermal_age_sm.to_rgba(ages_s[known_s]),
-                     alpha=0.9, s=80, marker=m)
-    axes1[1].scatter(D_s[known_s,0], D_s[known_s,2],
-                     c=thermal_age_sm.to_rgba(ages_s[known_s]),
-                     alpha=0.9, s=80, marker=m, label=s)
-    # Plot PCs vs age
-    axes2[0].scatter(ages_s[known_s], D_s[known_s,0], s=100,
-                     marker=m, alpha=0.9, label=s)
-    axes2[1].scatter(ages_s[known_s], D_s[known_s,1], s=100,
-                     marker=m, alpha=0.9)
+    axes[0].scatter(D_s[known_s,0], D_s[known_s,1], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m)
+    axes[1].scatter(D_s[known_s,0], D_s[known_s,2], c=htsm.to_rgba(ages_s[known_s]),
+                 alpha=0.9, s=80, marker=m, label=s)
+    ax1.scatter(ages_s[known_s], D_s[known_s,0], s=80,
+                marker=m, alpha=0.9, label=s)
 
-# Legends
-axes1[1].legend(fontsize = 'xx-large')
-axes2[0].legend(fontsize='xx-large')
+
+
+axes[1].legend(fontsize = 'x-large')
+ax1.legend(fontsize='x-large')
 # bbox_to_anchor=(1.13, 1.17)
-htcbar_ax = fig1.add_axes([0.3, 0.93, 0.4, 0.015])
-htcbar = plt.colorbar(thermal_age_sm, cax=htcbar_ax, orientation="horizontal")
-htcbar.ax.set_title(r"$\log(10C Thermal age + 1)$", size='xx-large')
+htcbar_ax = fig.add_axes([0.3, 0.93, 0.4, 0.015])
+htcbar = plt.colorbar(htsm, cax=htcbar_ax, orientation="horizontal")
+htcbar.ax.set_title(r"$\log(10C Thermal Age+1)$", size='x-large')
 htcbar.ax.tick_params(labelsize='x-large', length=4)
 
-# Axis
-axes1[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='xx-large')
-axes1[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
-               size='xx-large')
+axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
+               size='x-large')
+ax1.set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+               size='x-large')
+ax1.set_xlabel('log10(10C Thermal Age)', size='x-large')
+for ax in axes:
+    ax.tick_params(labelsize='x-large', length=4)
+# Revert y axes in pc1 vs age
+ax1.set_ylim(ax1.get_ylim()[::-1])
+axes[0].grid(False)
+axes[1].grid(False)
+ax1.grid(False)
+fig.savefig(out_dir + base_name + '_PCA_ThermalAge_bone_tarseep.png', format='png')
+fig1.savefig(out_dir + base_name + '_PC1_ThermalAge_bone_tarseep.png', format='png')
 
-axes2[0].set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-                    size='xx-large')
-axes2[1].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-                    size='xx-large')
-axes2[1].set_xlabel(r"$\log(10C\: Thermal\: age + 1)$", size='xx-large')
-
-# Revert y axes in pc vs age
-axes2[0].set_ylim(axes2[0].get_ylim()[::-1])
-axes2[1].set_ylim(axes2[1].get_ylim()[::-1])
-
-for ax1, ax2 in zip(axes1, axes2):
-    ax1.grid(False)
-    ax1.tick_params(labelsize='xx-large', length=4)
-    ax2.grid(False)
-    ax2.tick_params(labelsize='xx-large', length=4)
-fig1.set_tight_layout(True)
-fig2.set_tight_layout(True)
-fig1.savefig(out_dir + base_name + '_PCA_ThermalAge_bone_tarseep.png', format='png')
-plt.close()
-fig2.savefig(out_dir + base_name + '_PC_1_2_ThermalAge_bone_tarseep.png', format='png')
 plt.close()
