@@ -165,20 +165,24 @@ def transform(v, t, theta=1):
     return(v)
 
 
-def multiscatter(deamid_mat, key=None, type=None, hts=None,
+def multiscatter(deamid_mat, key=None, type=None, hts=None, l=None,
                  t=None, path=None, base_name=None, low_counts=None,
                  **kwargs):
     """
     Creates tripetides multiscatter plot
     Input:
         - key: Ydata entry info to include in the plot
+        - l: index of layer to plot
         - type: wether key is categorical ('cat') or continuous ('cont')
         - path: path in which plot is saved
     *Notes:
         - key can refer to numeric but still categorical data
     """
 
-    Ddata = deamid_mat.D
+    if l is not None:
+        Ddata = deamid_mat.layers[l]
+    else:
+        Ddata = deamid_mat.D
     counts = deamid_mat.counts
     Ydata = deamid_mat.Ydata
     trps_data = deamid_mat.trps_data
@@ -212,7 +216,7 @@ def multiscatter(deamid_mat, key=None, type=None, hts=None,
         'fontweight': 'medium',
         'mcolor': 'black',
         'msize': 5,
-        'reg': False,
+        'reg': None,
         'cat_cmap': 'tab10',
         'bbox_to_anchor': (0.5,2.2)
     }
@@ -260,9 +264,8 @@ def multiscatter(deamid_mat, key=None, type=None, hts=None,
     fig = plt.figure(figsize=(16, 12))
     axes = [[False for i in range(num_dims)] for j in range(num_dims)]
     n=1
-    # Regressor
-    # reg = linear_model.LinearRegression(fit_intercept=False)
-    # ridge = linear_model.Ridge(alpha=0.1)
+    if dfts['reg']=='linear':
+        reg = linear_model.BayesianRidge(fit_intercept=False)
     for i in range(num_dims):
         for j in range(num_dims):
             ax = fig.add_subplot(num_dims, num_dims, n)
@@ -284,28 +287,29 @@ def multiscatter(deamid_mat, key=None, type=None, hts=None,
             sele_unknown = np.logical_and(sele, ~known)
             if i != j:
                 # Fit linear regression
-                if X.shape[0]>1 and dfts['reg']==True:
-                    x_pred = np.linspace(-0.1,1.1,500)
-                    # Linear 1to1
-                    # reg.fit(X.reshape(-1,1), Y)
-                    # y_pred = reg.predict(x_pred.reshape(-1,1))
-                    # pl = ax.plot(x_pred.reshape(-1,1),y_pred, color='lime', linewidth=1)
-                    # pl = ax.plot([0,1], [0,1], color='lime', linewidth=0.6, alpha=0.8)
+                if X.shape[0]>1 and dfts['reg'] is not None:
+                    x_pred = np.linspace(np.nanmin(X),np.nanmax(X),500)
+                    if dfts['reg'] == 'linear':
+                        # Linear 1to1
+                        reg.fit(X[sele].reshape(-1,1), Y[sele])
+                        y_pred = reg.predict(x_pred.reshape(-1,1))
+                        pl = ax.plot(x_pred.reshape(-1,1) ,y_pred, color='lime', linewidth=1)
+                        # pl = ax.plot([0,1], [0,1], color='lime', linewidth=0.6, alpha=0.8)
+                    else:
+                        # Non-linear regression 1 parameter a
+                        a0 = 1
+                        res1 = least_squares(lsf1par, a0, loss='soft_l1', f_scale=0.1, args=(X,Y))
+                        a = res1.x
+                        y_pred = np.exp(a*(x_pred-1))
+                        pl = ax.plot(x_pred, y_pred, color='black', linewidth=1)
 
-                    # Non-linear regression 1 parameter a
-                    a0 = 1
-                    res1 = least_squares(lsf1par, a0, loss='soft_l1', f_scale=0.1, args=(X,Y))
-                    a = res1.x
-                    y_pred = np.exp(a*(x_pred-1))
-                    pl = ax.plot(x_pred, y_pred, color='black', linewidth=1)
-
-                    # Non-linear regression 1 parameter a
-                    a0 = 1
-                    res2 = least_squares(lsf1par_inv, a0, loss='soft_l1', f_scale=0.1, args=(X,Y))
-                    a = res2.x
-                    x_pred1 =  np.linspace(0.0001,1.1,500)
-                    y_pred = np.log(x_pred1)/a + 1
-                    pl = ax.plot(x_pred1, y_pred, color='red', linewidth=1)
+                        # Non-linear regression 1 parameter a
+                        a0 = 1
+                        res2 = least_squares(lsf1par_inv, a0, loss='soft_l1', f_scale=0.1, args=(X,Y))
+                        a = res2.x
+                        x_pred1 =  np.linspace(0.0001,1.1,500)
+                        y_pred = np.log(x_pred1)/a + 1
+                        pl = ax.plot(x_pred1, y_pred, color='red', linewidth=1)
 
                 if type != None:
                     sc = ax.scatter(X[sele_known], Y[sele_known],
@@ -333,18 +337,21 @@ def multiscatter(deamid_mat, key=None, type=None, hts=None,
                     txt = txt + str(trps_data[i][3])
                 ax.text(dfts['fontpos'][0], dfts['fontpos'][1],
                         txt, fontweight=dfts['fontweight'],
-                        fontsize=dfts['fontsize'])
+                        fontsize=dfts['fontsize'], transform=ax.transAxes)
                 if exists_hts == False:
                     ax.set_facecolor('white')
                 elif exists_hts == True and hts[i] != -1:
                     ax.set_facecolor(htsm.to_rgba(hts[i]))
                 else:
                     ax.set_facecolor('white')
+                ax.axis(xmin=np.nanmin(X), xmax=np.nanmax(X),
+                        ymin=np.nanmin(Y), ymax=np.nanmax(Y))
             # Set axis labels:
             ax.set_xlabel(trps_data['tripep'][j])
             ax.set_ylabel(trps_data['tripep'][i])
             # Equal scale axis
-            ax.axis(xmin=-0.1, xmax=1.1, ymin=-0.1, ymax=1.1)
+            # ax.axis(xmin=-0.1, xmax=1.1, ymin=-0.1, ymax=1.1)
+            # ax.set_aspect(aspect=1)
             # Hide axes for all but the plots on the edge:
             if i < num_dims - 1:
                 ax.xaxis.set_visible(False)

@@ -56,7 +56,8 @@ datapath = '/home/ismael/palaeoproteomics/datasets'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
 out_dir = '/home/ismael/palaeoproteomics/out/'
 base_name = 'logtr_nopompeii'
-
+fileQ = 'all_samplesQ'
+fileN = 'all_samplesN'
 # ------------------------------------------------------------------------------
 ## Load data
 
@@ -78,7 +79,7 @@ deamid_mat = deamidationMatrix(sampleTripeps, sampleInfo, header)
 pompeii_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii'}
 filter = [False if d in pompeii_samples else True
           for d in deamid_mat.Ydata['Dataset']]
-
+deamid_mat = deamid_mat.filter_samples(filter)
 
 sums = np.sum(deamid_mat.counts, axis=0)
 maxs = np.max(deamid_mat.counts, axis=0)
@@ -93,6 +94,8 @@ deamid_mat = deamid_mat.merge_by_tripep()
 deamid_mat = deamid_mat.filter_tripeps(deamid_mat.filter_by_pwcounts())
 man_rm = ['MQG', 'HQG', 'PQL', 'DNG', 'GQH', 'GNN', 'NNG']
 
+deamid_mat.log_1_d(tol=0.0001)
+
 Qfilter = [True if trp[1]=='Q' and trp not in man_rm else False
             for trp in deamid_mat.trps_data['tripep']]
 deamid_matQ = deamid_mat.filter_tripeps(Qfilter)
@@ -103,9 +106,6 @@ deamid_matN = deamid_mat.filter_tripeps(Nfilter)
 
 deamid_matQ, lambdasQ = sort_by_lambda(aa_properties, deamid_matQ)
 deamid_matN, lambdasN = sort_by_lambda(aa_properties, deamid_matN)
-fileQ = 'all_samplesQ'
-fileN = 'all_samplesN'
-
 
 # ------------------------------------------------------------------------------
 ## Simulate data
@@ -399,12 +399,12 @@ rr.Rlambda_distr(dataR_Q, deamid_matQ.trps_data,
                  path=out_dir, base_name=base_name+fileQ)
 
 # Multiscatter plots
-dc.multiscatter(deamid_matQ, hts=lambdasQ, t='norm',
-                path=out_dir, base_name=base_name+fileQ, low_counts=4,
-                fontsize=10, fontpos=[0.10,0.35], reg=False)
-dc.multiscatter(deamid_matN, hts=lambdasN, t='norm',
-                path=out_dir, base_name=base_name+fileN, low_counts=4,
-                fontsize=10, fontpos=[0.10,0.35], reg=False)
+dc.multiscatter(deamid_matQ, hts=lambdasQ, t='norm',l=0,
+                path=out_dir, base_name=base_name+fileQ+'_log', low_counts=None,
+                fontsize=10, fontpos=[0.10,0.35], reg='linear')
+dc.multiscatter(deamid_matN, hts=lambdasN, t='norm',l=0,
+                path=out_dir, base_name=base_name+fileN+'_log', low_counts=None,
+                fontsize=10, fontpos=[0.10,0.35], reg='linear')
 #
 # # Calculate correlation
 # corr_matQ = dc.correlation(deamid_matQ.D, deamid_matQ.trps_data,

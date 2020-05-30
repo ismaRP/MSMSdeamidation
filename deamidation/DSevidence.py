@@ -4,7 +4,7 @@ import scipy as sp
 from scipy import stats
 import matplotlib.pyplot as plt
 from deamidation.accFunctions import map_range
-
+import warnings
 
 class protein():
 
@@ -167,6 +167,7 @@ class deamidationMatrix():
         - counts
         - trps_data
             (prot_name, seq,  pos, corr_pos 'prot_name-seq-pos')
+        - layers. List of matrices aligned to D
     """
     def __get_trps_data(self, sampleTripeps):
         all_tripeps = {}
@@ -226,7 +227,8 @@ class deamidationMatrix():
         self.rel_ints = rel_ints
 
     def __init__(self, sampleTripeps=None, sampleInfo=None, header=None,
-                 D=None, Ydata=None, rel_ints=None, trps_data=None, counts=None):
+                 D=None, Ydata=None, rel_ints=None, trps_data=None, counts=None,
+                 layers=[]):
         if ((sampleInfo is not None) and (header is not None)
             and (sampleTripeps is not None)):
             #
@@ -234,6 +236,7 @@ class deamidationMatrix():
             self.trps_data = self.__get_trps_data(sampleTripeps)
             self.__set_matrix(sampleTripeps, sampleInfo)
             self.simulated_data = False
+            self.layers = []
         elif ((D is not None) and (Ydata is not None)
             and (trps_data is not None)):
             #
@@ -242,6 +245,7 @@ class deamidationMatrix():
             self.counts = counts
             self.rel_ints = rel_ints
             self.trps_data = trps_data
+            self.layers = layers
             if (counts is None) and (rel_ints is None):
                 self.simulated_data = True
             else:
@@ -292,6 +296,17 @@ class deamidationMatrix():
     def set_trps_data(self, trps_data):
         self.trps_data = trps_data
 
+
+    def log_1_d(self, tol):
+        """
+        Transform data to ln(1-d) and store it in a layer
+        """
+        # Convert to nan d > 1-tol
+        L = np.copy(self.D)
+        L[L > 1-tol] = np.nan
+        L = np.log(1-L)
+        self.layers.append(L)
+
     def filter_by_pwcounts(self, cutoff=5):
         """
         Returns a mask matrix indicating which tripeps to keep
@@ -317,6 +332,9 @@ class deamidationMatrix():
     def sort_tripeps(self, idx):
         sorted_D = self.D[:,idx]
         sorted_trps_data = self.trps_data[idx]
+        sorted_layers = [None]*len(self.layers)
+        for i in range(len(self.layers)):
+            sorted_layers[i] = self.layers[i][:,idx]
         if not self.simulated_data:
             sorted_counts = self.counts[:,idx]
             sorted_rel_ints = self.rel_ints[:,idx]
@@ -327,13 +345,17 @@ class deamidationMatrix():
                                        Ydata=self.Ydata,
                                        counts=sorted_counts,
                                        rel_ints=sorted_rel_ints,
-                                       trps_data=sorted_trps_data)
+                                       trps_data=sorted_trps_data,
+                                       layers=sorted_layers)
         return(deamid_mat)
 
 
     def filter_tripeps(self, mask):
         filt_D = self.D[:,mask]
         filt_trps_data = self.trps_data[mask]
+        filt_layers = [None]*len(self.layers)
+        for i in range(len(self.layers)):
+            filt_layers[i] = self.layers[i][:,mask]
         if not self.simulated_data:
             filt_counts = self.counts[:,mask]
             filt_rel_ints = self.rel_ints[:,mask]
@@ -344,12 +366,16 @@ class deamidationMatrix():
                                        Ydata=self.Ydata,
                                        counts=filt_counts,
                                        rel_ints=filt_rel_ints,
-                                       trps_data=filt_trps_data)
+                                       trps_data=filt_trps_data,
+                                       layers=filt_layers)
         return(deamid_mat)
 
     def filter_samples(self, mask):
         filt_D = self.D[mask,:]
         filt_Ydata = {}
+        filt_layers = [None]*len(self.layers)
+        for i in range(len(self.layers)):
+            filt_layers[i] = self.layers[i][mask,:]
         if not self.simulated_data:
             filt_counts = self.counts[mask,:]
             filt_rel_ints = self.rel_ints[mask,:]
@@ -362,10 +388,14 @@ class deamidationMatrix():
                                        Ydata=filt_Ydata,
                                        counts=filt_counts,
                                        rel_ints=filt_rel_ints,
-                                       trps_data=self.trps_data)
+                                       trps_data=self.trps_data,
+                                       layers=filt_layers)
         return(deamid_mat)
 
     def merge_by_tripep(self):
+
+        if len(self.layers) > 0:
+            warnings.warn('The layers of transformed data will be removed.')
 
         groups = self.trps_data['tripep']
 
@@ -413,6 +443,9 @@ class deamidationMatrix():
 
 
     def merge_by_pos(self, corr):
+
+        if len(self.layers) > 0:
+            warnings.warn('The layers of transformed data will be removed.')
 
         if corr == True:
             groups = self.trps_data['corr_pos']
