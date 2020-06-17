@@ -6,6 +6,35 @@ import matplotlib.pyplot as plt
 from deamidation.accFunctions import map_range
 import warnings
 
+
+class peptide():
+
+    def __init__(id, intensity, proteins,
+                 leadingrazorprotein, start):
+
+        self.id = 0
+        self.intensity = 0
+        self.proteins = {}
+        self.leadingrazor_id = 0
+        self.start_position = 0
+        self.end_position = 0
+
+        # PTMs id are defined by residue + local position
+        # {
+        #     'Q11':
+        #         [
+        #             residue,
+        #             position,
+        #             modification,
+        #             modified
+        #         ],
+        #     ...
+        # }
+        self.ptm_position = {}
+
+
+
+
 class protein():
 
     def __init__(self, name):
