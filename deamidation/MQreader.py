@@ -3,12 +3,14 @@ import re
 import numpy as np
 import scipy as sp
 from sklearn.preprocessing import quantile_transform
-from deamidation.DSevidence import protein, sample, dataBatch
+from deamidation.DSevidence import peptide, protein, sample, dataBatch
 from deamidation.accFunctions import readHeader
+from deamidation.accFunctions import readSampleInfo, readProtList
 
 class evidenceBatchReader():
 
-    def __init__(self, datapath, ptm=['de'], aa=['QN'], sep='\t', byPos=False,
+    def __init__(self, datapath, prot_f, samples_f,
+                 ptm=['de'], aa=['QN'], sep='\t',
                  tr=None, sf_exp=[], include=None, exclude=None):
         """
         Include: only selected are analyzed
@@ -26,14 +28,37 @@ class evidenceBatchReader():
             kept_data = [d for d in datasets if d not in exclude]
         else:
             kept_data = datasets
-        self.ptm = ['\(' + p + '\)' for p in ptm]
-        self.aa = aa
+
+        ptm = ['(\(' + p + '\))?' for p in ptm]
+
+        aalist = '([ARNDCEQGHILKMFPUSTWYVX_]{1})'
+        aa_s = '([' + ''.join(aa) + '])'
+        aa_m = ['[' + a + ']' for a in aa]
+        # Build regexS to find position in seq
+        regexS = '(?=(' + aalist + aa_s + aalist + '))'
+        # Build regexM to find position in modseq
+        aamod = [a + mod for a,mod in zip(aa_m, ptm)]
+        regexM = '(' + '|'.join(aamod) + ')'
+
+        # Compile regex
+        self.regexM = re.compile(regexM)
+        self.regexS = re.compile(regexS)
+
         self.datasets = kept_data
         self.paths = [datapath + d for d in self.datasets]
         self.sep = sep
-        self.byPos = byPos
         self.sf_exp = sf_exp
 
+        self.prot_f = readProtList(prot_f)
+        self.samples_f = readSampleInfo(samples_f)
+            doc = prot_f property."
+            def fget(self):
+                return sprot_f
+            def fset(self, value):
+                sprot_f = value
+            def fdel(self):
+                del sprot_f
+            return localsprot_f = properprot_f())
         if tr in {'qt','lognorm'}:
             self.per_sample_tr = True
             if tr == 'qt':
@@ -100,16 +125,21 @@ class evidenceBatchReader():
         infile.close()
         return peptides
 
-    def __getmod(self, seq, modseq, regexM, regexS, start=0):
-
-        if self.byPos == False:
-            d = [[s.group(1)+ '-' 'nan', m.group(2), 0]
-                for s,m in zip(regexS.finditer(seq),  regexM.finditer(modseq))]
-        else:
-            # Find tripeps and positions
-            d = [[s.group(1)+ '-' + str(s.start()+start), m.group(2), s.start()+start]
-                for s,m in zip(regexS.finditer(seq),  regexM.finditer(modseq))]
-        return(d)
+    def __getmod(self, seq, modseq, start=0):
+        seq = '_' + seq + '_'
+        # PTMs ids in peptides are defined by residue + local position
+        # [
+        #    [
+        #         residue,
+        #         modification,
+        #         local position,
+        #         protein position
+        #     ],
+        # ...
+        # ]
+        ptms = [[s.group(3), m.group(0), s.start(3), s.start(3)+start]
+                 for s,m in zip(regexS.finditer(seq),regexM.finditer(modseq))]
+        return(ptms)
     # def __getmod(self, seq, modseq, deamidRe, tripepRe, start=0):
     #     """
     #     Parse sequence and modified sequence.
@@ -218,7 +248,7 @@ class evidenceBatchReader():
         """
         Read evidence.txt file from MaxQuant output
 
-        sampleProt =
+        MQdata =
             {sample1: sampleObject,
              ...
             }
@@ -227,32 +257,40 @@ class evidenceBatchReader():
         # Read peptides.txt
         peptides = self.__read_peptides(folder)
 
-        sampleProt = {}
+        MQdata = {} # Contains samples with their peptides
+        # {
+        #     prot1id: prot1_object,
+        #     prot2id: prot2_object
+        # }
 
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
 
-        headerPos = readHeader(['modseq', 'intensity', 'sample',
-                                'protein', 'length',
-                                'seq', 'peptideID', 'evidenceID'],
-                               ['Modified sequence', 'Intensity', sample_field,
-                                'Leading razor protein', 'Length',
-                                'Sequence', 'Peptide ID', 'id'],
-                               header)
-        ### Complete regex
-        aalist = '([ARNDCEQGHILKMFPUSTWYVX_]{1})'
+        headerPos = readHeader(
+            [
+                'seq'
+                'modseq',
+                'intensity',
+                'sample',
+                'proteins',
+                'leading_prots',
+                'leading_razor_prot'
+                'peptideID',
+                'evidenceID'
+            ],
+            [
+                'Sequence'
+                'Modified sequence',
+                'Intensity',
+                sample_field,
+                'Proteins',
+                'Leading proteins',
+                'Leading razor protein',
+                'Peptide ID',
+                'id'
+            ],
+            header)
 
-        # Build regexM to find in modseq
-        regexM = '|'.join(self.ptm)
-        regexM = '(' + regexM + ')?'
-        regexM = '([' + ''.join(self.aa) + '])' + regexM
-
-        # Build regexS to find in seq
-        regexS = '(?=(' + aalist + '([' + ''.join(self.aa) + '])' + aalist + '))'
-
-        # Compile regex
-        regexM = re.compile(regexM)
-        regexS = re.compile(regexS)
 
         if self.tr is not None:
             if self.per_sample_tr:
@@ -268,7 +306,7 @@ class evidenceBatchReader():
             line = line.split(self.sep)
 
             sample_name = line[headerPos['sample']]
-            protein_name = line[headerPos['protein']]
+
             modseq = line[headerPos['modseq']]
             # _GAP(hy)GADGPAGAP(hy)GTP(hy)GPQ(de)GIAGQ(de)R_
             seq = line[headerPos['seq']]
@@ -292,45 +330,40 @@ class evidenceBatchReader():
 
             intensities[length-1].append(intensity)
 
-            deamid_tripep = self.__getmod('_'+seq+'_', modseq,
-                                          regexM, regexS,
-                                          start)
+            proteins = set(line[headerPos['proteins']].split(';'))
+            leading_prots = set(line[headerPos['leading_prots']].split(';'))
+            leading_razor_prot = line[headerPos['leading_razor_prot']]
+
+
+
+            ptms = self.__getmod(seq, modseq, start)
+            pep = peptide(peptideID, intensity, start, end, sequence, ptms,
+                          proteins, leading_prots, leading_razor_prot)
 
             # Fill sample and protein data
-            if sample_name not in sampleProt:
-                sampleProt[sample_name] = sample(sample_name)
-                sampleProt[sample_name].proteins[protein_name] = protein(protein_name)
-            elif protein_name not in sampleProt[sample_name].proteins:
-                sampleProt[sample_name].proteins[protein_name] = protein(protein_name)
+            if sample_name not in MQdata:
+            # If new sample, create and add first peptide
+                MQdata[sample_name] = sample(sample_name)
+                MQdata[sample_name].peptides[seq] = p
+            else:
+            # Else (sample already created)
+                # Add peptide
+                MQdata[sample_name].peptides[seq] = p
+            # Add proteins to sample
+            for prot_id in proteins:
+                if prot not in MQdata[sample_name].proteins:
+                    prot_name = self.prot_f[prot_id][0]
+                    MQdata[sample_name].proteins[prot] = protein(
+                        prot_id, prot_name, len(MQdata[sample_name].proteins[prot]))
+                    )
 
-            sampleProt[sample_name].proteins[protein_name].seqs.update({seq})
-            sampleProt[sample_name].proteins[protein_name].total_int += intensity
-            sampleProt[sample_name].total_int += intensity
-            if intensity > sampleProt[sample_name].max_int:
-                sampleProt[sample_name].max_int = intensity
-            if intensity < sampleProt[sample_name].min_int:
-                sampleProt[sample_name].min_int = intensity
-
-            # Collect tripetides X[NQ]Y into protein
-            for dap in deamid_tripep:
-                idx = 2 if dap[1] is None else 0
-                trp = dap[0]
-                position = dap[2]
-
-                if trp[2] == '_':
-                    trp = trp[:2] + aft + trp[3:]
-                elif trp[0] == '_':
-                    trp = bef + trp[1:]
-
-                if trp not in sampleProt[sample_name].proteins[protein_name].tripeptides:
-                    new_entry = np.array([0,0,0,0, position])
-                    new_entry[idx] = intensity
-                    new_entry[idx+1] = 1
-                    sampleProt[sample_name].proteins[protein_name].tripeptides[trp] = new_entry
-                else:
-                    sampleProt[sample_name].proteins[protein_name].tripeptides[trp][idx] += intensity
-                    sampleProt[sample_name].proteins[protein_name].tripeptides[trp][idx+1] += 1
+            MQdata[sample_name].total_int += intensity
+            if intensity > MQdata[sample_name].max_int:
+                MQdata[sample_name].max_int = intensity
+            if intensity < MQdata[sample_name].min_int:
+                MQdata[sample_name].min_int = intensity
 
         infile.close()
 
-        return sampleProt, intensities
+
+        return MQdata, intensities

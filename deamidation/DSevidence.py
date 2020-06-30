@@ -9,17 +9,48 @@ import warnings
 
 class peptide():
 
-    def __init__(id, intensity, proteins,
-                 leadingrazorprotein, start):
+    def __init__(id, intensity, start, end, sequence, ptms,
+                 proteins, leading_proteins, leading_razor_protein):
 
-        self.id = 0
-        self.intensity = 0
-        self.proteins = {}
-        self.leadingrazor_id = 0
-        self.start_position = 0
-        self.end_position = 0
+        self.id = id
+        self.intensity = intentisy
+        self.sequence = sequence
+        self.length = len(sequence)
 
-        # PTMs id are defined by residue + local position
+        # Start and end position in leading razor protein
+        self.start_position = start
+        self.end_position = end
+
+        # PTMS
+        self.ptms = ptms
+
+        # Initialize preotein data
+        self.proteins = proteins
+        self.proteins_w = np.array([])
+        self.leading_proteins = leading_proteins
+        self.leading_proteins_w = []
+        self.leading_razor_protein = leading_razor_protein
+
+
+
+class protein():
+
+    def __init__(self, id, name, idx):
+        """
+        tripeptides =
+        {AQG: [deamid_int, deamid_count,
+               nondeamid_int, nondeamid_count,
+               pos],
+         ...
+        }
+        """
+        self.id = id
+        self.name = name
+        self.index = idx
+
+
+        # self.tripeptides = {}
+        # PTMs ids in proteins are defined by residue + global position
         # {
         #     'Q11':
         #         [
@@ -30,36 +61,44 @@ class peptide():
         #         ],
         #     ...
         # }
-        self.ptm_position = {}
-
-
-
-
-class protein():
-
-    def __init__(self, name):
-        """
-        tripeptides =
-        {AQG: [deamid_int, deamid_count,
-               nondeamid_int, nondeamid_count,
-               pos],
-         ...
-        }
-        """
-        self.name = name
-        self.tripeptides = {}
-        self.seqs = set()
-        self.total_int = 0
+        # Attributed PTMs by a unique pep-prot association
+        # self.unique_ptm = {}
+        # Attributed PTMs by a razor leading pep-prot association
+        # self.razor_ptm = {}
 
 
 class sample():
 
     def __init__(self, name):
         self.name = name
+
         self.total_int = 0
         self.max_int = 0
         self.min_int = np.inf
+
+        self.peptides {}
         self.proteins = {}
+
+        self.pep2prot = []
+        self.pep2lprot = []
+        self.pep2lrprot = []
+
+    def protein_associations():
+        for pep in self.peptides.items():
+            self.pep2prot.append(
+                [1 if prot in pep.proteins else 0 for prot in self.proteins.keys()]
+            )
+            self.pep2lprot.append(
+                [1 if prot in pep.leading_proteins else 0 for prot in self.proteins.keys()]
+            )
+            self.pep2lrprot.append(
+                [1 if prot == pep.leading_razor_protein else 0 for prot in self.proteins.keys()]
+            )
+
+    def pep2prot_weights():
+        # Sum pep2lprot rows and get the ones > 1
+        amb_peps = np.sum(self.pep2lprot, axis=1) > 1
+
 
 class dataBatch():
 
