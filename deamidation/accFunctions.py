@@ -144,41 +144,6 @@ def readHeader(names_after, names_before, header):
     return(headerPos)
 
 
-def readSampleInfo(path):
-    sampleInfo = {}
-    with open(path, 'r') as infile:
-        header = infile.readline()[:-1].split('\t')
-        # headerPos = readHeader(['sample', 'age', 'sp',
-        #                         'genus', 'loc', 'site', 'PartBody'],
-        #                        ['SampleName', 'Age', 'Species label',
-        #                         'Genus', 'Location', 'Site', 'Part of Body'],
-        #                        header)
-
-        for line in infile:
-            line = line[:-1]
-            line = line.split('#')[0].rstrip()
-            if line == '':
-                continue
-            line = line.split('\t')
-            sample = line[0]
-            fields = line[1:]
-            sampleInfo[sample] = fields
-    return sampleInfo, header
-
-def readProtList(path):
-    with open(path, 'r') as infile:
-        proteins = {}
-        for line in infile.readlines():
-            line = line.rstrip()
-            line = line.split('#')[0].rstrip()
-            if line == '':
-                continue
-            line = line.split('\t')
-            ch1_start = int(line[2]) if line[2]!='NA' else 1
-            ch2_start = int(line[3]) if line[3]!='NA' else line[3]
-            proteins[line[0]]=[line[1], ch1_start, ch2_start]
-        return(proteins)
-
 def map_range(sum_int, sample_max_int, sample_min_int):
     """
     Maps intensity to range given the maximum of the sample

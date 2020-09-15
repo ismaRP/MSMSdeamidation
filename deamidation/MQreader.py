@@ -1,11 +1,17 @@
 import os
 import re
+
+from Bio import SeqIO
+from Bio.Align.Applications import ClustalwCommandline
+from Bio import AlignIO
+
 import numpy as np
 import scipy as sp
+import pandas as pd
 from sklearn.preprocessing import quantile_transform
-from deamidation.DSevidence import peptide, protein, sample, dataBatch
+
+from deamidation.DSevidence import peptide, protein, sample, MQrun, MQdata
 from deamidation.accFunctions import readHeader
-from deamidation.accFunctions import readSampleInfo, readProtList
 
 class evidenceBatchReader():
 
@@ -49,16 +55,11 @@ class evidenceBatchReader():
         self.sep = sep
         self.sf_exp = sf_exp
 
-        self.prot_f = readProtList(prot_f)
-        self.samples_f = readSampleInfo(samples_f)
-            doc = prot_f property."
-            def fget(self):
-                return sprot_f
-            def fset(self, value):
-                sprot_f = value
-            def fdel(self):
-                del sprot_f
-            return localsprot_f = properprot_f())
+        self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep='\t')
+        self.prot_set = set(self.prot_f.index)
+        self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep='\t')
+        self.samples_set = set(self.samples_f.index)
+
         if tr in {'qt','lognorm'}:
             self.per_sample_tr = True
             if tr == 'qt':
@@ -79,21 +80,22 @@ class evidenceBatchReader():
 
     def readBatch(self):
 
-        tmp_batch = {}
+        mqdata = MQdata(self.prot_f)
+
         intensities = [[] for i in range(60)]
         for d, p in zip(self.datasets, self.paths):
             if d in self.sf_exp:
-                tmp_batch[d], intensities = self.importEvidence(p, intensities,
-                                                              sample_field='Experiment')
+                mqrun, intensities = self.importEvidence(p, intensities,
+                                                         sample_field='Experiment')
             else:
-                tmp_batch[d], intensities = self.importEvidence(p, intensities,
-                                                              sample_field='Raw file')
+                mqrun, intensities = self.importEvidence(p, intensities,
+                                                         sample_field='Raw file')
+            mqdata.add_mqrun(mqrun)
         intensities = np.array([np.array(v) for v in intensities])
+        mqdata.intensities = intensities
 
-        data_batch = dataBatch(tmp_batch, intensities, self.byPos)
 
-        return(data_batch)
-
+        return(mqdata)
 
     def __read_peptides(self, folder, sep='\t'):
         """
@@ -140,30 +142,7 @@ class evidenceBatchReader():
         ptms = [[s.group(3), m.group(0), s.start(3), s.start(3)+start]
                  for s,m in zip(regexS.finditer(seq),regexM.finditer(modseq))]
         return(ptms)
-    # def __getmod(self, seq, modseq, deamidRe, tripepRe, start=0):
-    #     """
-    #     Parse sequence and modified sequence.
-    #     Returns a list of lists:
-    #     [[tripep1, '(de)', position], [tripep2, '(de)', position]]
-    #     if byPos is True, tripep has the format like in "AQG-532"
-    #     if byPos is False, tripep is just AQG and position is 0
-    #     """
-    #
-    #     if self.byPos == False:
-    #         d = [[m.group(2)+m.group(4)+m.group(6)+'-nan',
-    #               m.group(5),
-    #               0]
-    #              for m in deamidRe.finditer(modseq)]
-    #     else:
-    #         # Find tripeps in the non-modified sequence
-    #         pos = [m.start()+start for m in tripepRe.finditer(seq)]
-    #         # Find tripeps in the modified sequence
-    #         d = [
-    #                 [m.group(2)+m.group(4)+m.group(6)+'-'+str(pos[i]),
-    #                  m.group(5),
-    #                  pos[i]
-    #             ]for i, m in enumerate(deamidRe.finditer(modseq))]
-    #     return d
+
 
     def __qt(self, x):
         transformed = quantile_transform(np.reshape(x,(-1,1)),
@@ -257,11 +236,7 @@ class evidenceBatchReader():
         # Read peptides.txt
         peptides = self.__read_peptides(folder)
 
-        MQdata = {} # Contains samples with their peptides
-        # {
-        #     prot1id: prot1_object,
-        #     prot2id: prot2_object
-        # }
+        mqrun = MQrun() # Contains samples with their peptides
 
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
@@ -306,7 +281,8 @@ class evidenceBatchReader():
             line = line.split(self.sep)
 
             sample_name = line[headerPos['sample']]
-
+            if sample_name not in self.samples_set:
+                continue
             modseq = line[headerPos['modseq']]
             # _GAP(hy)GADGPAGAP(hy)GTP(hy)GPQ(de)GIAGQ(de)R_
             seq = line[headerPos['seq']]
@@ -330,38 +306,46 @@ class evidenceBatchReader():
 
             intensities[length-1].append(intensity)
 
-            proteins = set(line[headerPos['proteins']].split(';'))
-            leading_prots = set(line[headerPos['leading_prots']].split(';'))
+            proteins = line[headerPos['proteins']].split(';'))
+            proteins = [p for p in proteins if in self.prot_set]
+            if len(proteins) == 0:
+                continue
+            leading_prots = line[headerPos['leading_prots']].split(';')
+            leading_prots = [p for p in leading_prots if in self.prot_set]
+            if len(leading_prots) == 0:
+                continue
             leading_razor_prot = line[headerPos['leading_razor_prot']]
 
-
+            tmp_prot = {}
+            for prot_id in proteins:
+                prot_info = self.prot_f.loc[prot_id]
+                prot = protein(
+                    prot_id, prot_info,
+                )
+                tmp_prot[prot_id] = prot
 
             ptms = self.__getmod(seq, modseq, start)
             pep = peptide(peptideID, intensity, start, end, sequence, ptms,
                           proteins, leading_prots, leading_razor_prot)
 
             # Fill sample and protein data
-            if sample_name not in MQdata:
+            if sample_name not in mqrun.samples:
             # If new sample, create and add first peptide
-                MQdata[sample_name] = sample(sample_name)
-                MQdata[sample_name].peptides[seq] = p
+                sample_info = self.sample_f.loc[sample_name]
+                mqrun.samples[sample_name] = sample(sample_name, sample_info)
+                mqrun.samples[sample_name].peptides[seq] = p
             else:
             # Else (sample already created)
                 # Add peptide
-                MQdata[sample_name].peptides[seq] = p
-            # Add proteins to sample
-            for prot_id in proteins:
-                if prot not in MQdata[sample_name].proteins:
-                    prot_name = self.prot_f[prot_id][0]
-                    MQdata[sample_name].proteins[prot] = protein(
-                        prot_id, prot_name, len(MQdata[sample_name].proteins[prot]))
-                    )
+                mqrun.samples[sample_name].peptides[seq] = p
 
-            MQdata[sample_name].total_int += intensity
-            if intensity > MQdata[sample_name].max_int:
-                MQdata[sample_name].max_int = intensity
-            if intensity < MQdata[sample_name].min_int:
-                MQdata[sample_name].min_int = intensity
+            # Add proteins to sample
+            mqrun.samples[sample_name].proteins.update(tmp_prot)
+
+        # Create sample protein and peptide lists
+        for sample_name, sample in mqrun.samples.items():
+            sample.update_prot_list()
+            sample.update_pept_list()
 
         infile.close()
 
