@@ -27,7 +27,9 @@ class evidenceBatchReader():
         """
         if datapath[-1] != '/':
             datapath += '/'
+
         datasets = os.listdir(datapath)
+        datasets = [name for name in os.listdir(datapath) if os.path.isdir(os.path.join(datapath, name))]
         if include is not None:
             kept_data = [d for d in datasets if d in include]
         elif exclude is not None:
@@ -55,9 +57,9 @@ class evidenceBatchReader():
         self.sep = sep
         self.sf_exp = sf_exp
 
-        self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep='\t')
+        self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep=',')
         self.prot_set = set(self.prot_f.index)
-        self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep='\t')
+        self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
         self.samples_set = set(self.samples_f.index)
 
         if tr in {'qt','lognorm'}:
@@ -140,7 +142,8 @@ class evidenceBatchReader():
         # ...
         # ]
         ptms = [[s.group(3), m.group(0), s.start(3), s.start(3)+start]
-                 for s,m in zip(regexS.finditer(seq),regexM.finditer(modseq))]
+                 for s,m in zip(self.regexS.finditer(seq),
+                                self.regexM.finditer(modseq))]
         return(ptms)
 
 
@@ -243,18 +246,18 @@ class evidenceBatchReader():
 
         headerPos = readHeader(
             [
-                'seq'
+                'seq',
                 'modseq',
                 'intensity',
                 'sample',
                 'proteins',
                 'leading_prots',
-                'leading_razor_prot'
+                'leading_razor_prot',
                 'peptideID',
                 'evidenceID'
             ],
             [
-                'Sequence'
+                'Sequence',
                 'Modified sequence',
                 'Intensity',
                 sample_field,
@@ -286,8 +289,6 @@ class evidenceBatchReader():
             modseq = line[headerPos['modseq']]
             # _GAP(hy)GADGPAGAP(hy)GTP(hy)GPQ(de)GIAGQ(de)R_
             seq = line[headerPos['seq']]
-            length = line[headerPos['length']]
-            length = int(length)
             evidenceID = line[headerPos['evidenceID']]
 
             # Get intensity from transofrmed list
@@ -297,21 +298,24 @@ class evidenceBatchReader():
 
             # Get peptide-in-protein position info
             start = peptides[peptideID][0]
-            start = int(start) if start!='' else 0
+            start = int(start)-1 if start!='' else 0
+
+            end = peptides[peptideID][1]
+            end = int(end) if end!='' else 0
 
             bef = peptides[peptideID][2]
             if bef=='-' or bef=='': bef = '_'
             aft = peptides[peptideID][3]
             if aft=='-' or bef=='': aft = '_'
 
-            intensities[length-1].append(intensity)
+            intensities[len(seq)-1].append(intensity)
 
-            proteins = line[headerPos['proteins']].split(';'))
-            proteins = [p for p in proteins if in self.prot_set]
+            proteins = line[headerPos['proteins']].split(';')
+            proteins = [p for p in proteins if p in self.prot_set]
             if len(proteins) == 0:
                 continue
             leading_prots = line[headerPos['leading_prots']].split(';')
-            leading_prots = [p for p in leading_prots if in self.prot_set]
+            leading_prots = [p for p in leading_prots if p in self.prot_set]
             if len(leading_prots) == 0:
                 continue
             leading_razor_prot = line[headerPos['leading_razor_prot']]
@@ -325,29 +329,29 @@ class evidenceBatchReader():
                 tmp_prot[prot_id] = prot
 
             ptms = self.__getmod(seq, modseq, start)
-            pep = peptide(peptideID, intensity, start, end, sequence, ptms,
+            pep = peptide(peptideID, intensity, start, end, bef, aft, seq, ptms,
                           proteins, leading_prots, leading_razor_prot)
 
             # Fill sample and protein data
             if sample_name not in mqrun.samples:
             # If new sample, create and add first peptide
-                sample_info = self.sample_f.loc[sample_name]
+                sample_info = self.samples_f.loc[sample_name]
                 mqrun.samples[sample_name] = sample(sample_name, sample_info)
-                mqrun.samples[sample_name].peptides[seq] = p
+                mqrun.samples[sample_name].pept_dict[evidenceID] = pep
             else:
             # Else (sample already created)
                 # Add peptide
-                mqrun.samples[sample_name].peptides[seq] = p
+                mqrun.samples[sample_name].pept_dict[evidenceID] = pep
 
             # Add proteins to sample
-            mqrun.samples[sample_name].proteins.update(tmp_prot)
+            mqrun.samples[sample_name].prot_dict.update(tmp_prot)
 
         # Create sample protein and peptide lists
-        for sample_name, sample in mqrun.samples.items():
-            sample.update_prot_list()
-            sample.update_pept_list()
+        for sample_name, sample_obj in mqrun.samples.items():
+            sample_obj.update_prot_list()
+            sample_obj.update_pept_list()
 
         infile.close()
 
 
-        return MQdata, intensities
+        return mqrun, intensities

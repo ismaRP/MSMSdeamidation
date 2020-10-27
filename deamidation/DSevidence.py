@@ -9,23 +9,26 @@ from anndata import AnnData
 
 import re
 
-from Bio import SeqIO
+from Bio import SeqIO, AlignIO
 from Bio.Align.Applications import ClustalwCommandline
-from Bio import AlignIO
+from Bio.Align import AlignInfo
 
 class peptide():
 
-    def __init__(id, intensity, start, end, sequence, ptms,
+    def __init__(self, id, intensity, start, end,  bef, aft, sequence, ptms,
                  proteins, leading_proteins, leading_razor_protein):
 
         self.id = id
-        self.intensity = intentisy
+        self.intensity = intensity
         self.sequence = sequence
         self.length = len(sequence)
 
         # Start and end position in leading razor protein
         self.start_position = start
         self.end_position = end
+
+        self.aabef = bef
+        self.aaaft = aft
 
         # PTMS
         self.ptms = ptms
@@ -34,14 +37,14 @@ class peptide():
         self.proteins = proteins
         self.proteins_w = np.array([])
         self.leading_proteins = leading_proteins
-        self.leading_proteins_w = []
+        self.leading_proteins_w = np.array([])
         self.leading_razor_protein = leading_razor_protein
 
 
 
 class protein():
 
-    def __init__(self, id, prot_info, idx):
+    def __init__(self, id, prot_info):
         """
         Sample protein
         """
@@ -50,7 +53,7 @@ class protein():
 
 
 
-        self.modifications = {}
+        self.ptms = {}
         # PTMs ids in proteins are defined by residue + global position
         # {
         #     'Q11':
@@ -58,6 +61,7 @@ class protein():
         #             residue,
         #             modification,
         #             position,
+        #             mapped position,
         #             int_unmodified,
         #             int_modified
         #         ],
@@ -87,18 +91,19 @@ class sample():
     def update_pept_list(self):
         self.pept_list = np.array(list(self.pept_dict))
 
-    def filter_prots(self):
+    def filter_species_prots(self):
         """
         Filters out proteins that do not match the sample species
         """
-        sample_sp = sample.info.Species
-        for prot_id in self.prot_dict():
-            prot_sp = mqr.proteins[prot_id].info.Species
+        sample_sp = self.info.Species
+        prot_dict_tmp = self.prot_dict.copy()
+        for prot_id, prot in prot_dict_tmp.items():
+            prot_sp = prot.info.Species
             if prot_sp not in sample_sp:
                 # Remove protein from sample
                 self.prot_dict.pop(prot_id)
                 # Go through peptides and remove protein
-                for seq, pept in self.pept_dict.items():
+                for evID, pept in self.pept_dict.items():
                     if prot_id == pept.leading_razor_protein:
                         pept.leading_razor_protein == None
                         pept.proteins.remove(prot_id)
@@ -111,15 +116,61 @@ class sample():
         # Update sample prot_list
         self.update_prot_list()
 
-    def filter_nonassociated_peptides(self):
+    def filter_prots(self, keep_names):
+        """
+        Filter proteins with name not in prot_names
+        """
+        prot_dict_tmp = self.prot_dict.copy()
+        for prot_id, prot in prot_dict_tmp.items():
+            prot_n = prot.info.protein_name
+            if prot_n not in keep_names:
+                # Remove protein from sample
+                self.prot_dict.pop(prot_id)
+                # Go through peptides and remove protein
+                for evID, pept in self.pept_dict.items():
+                    if prot_id == pept.leading_razor_protein:
+                        pept.leading_razor_protein == None
+                        pept.proteins.remove(prot_id)
+                        pept.leading_proteins.remove(prot_id)
+                    if prot_id in pept.leading_proteins:
+                        pept.leading_proteins.remove(prot_id)
+                        pept.proteins.remove(prot_id)
+                    if prot_id in pept.proteins:
+                        pept.proteins.remove(prot_id)
+        # Update sample prot_list
+        self.update_prot_list()
+
+
+    def filter_nonassociated_peptides(self, which='razor'):
         """
         Filters out peptides that are not associated to any protein
         """
-        for seq, pept in self.pept_dict.items():
-            if len(pept.self.leading_proteins) == 0:
-                self.pept_dict.remove(seq)
-        # Update sample pept_list
-        self.update_pept_list()
+
+        if which == 'razor':
+            pept_dict_tmp = self.pept_dict.copy()
+            for evID, pept in pept_dict_tmp.items():
+                if pept.leading_razor_protein is None:
+                    self.pept_dict.pop(seq)
+            # Update sample pept_list
+            self.update_pept_list()
+
+        elif which == 'leading':
+            pept_dict_tmp = self.pept_dict.copy()
+            for evID, pept in pept_dict_tmp.items():
+                if len(pept.leading_proteins) == 0:
+                    self.pept_dict.pop(seq)
+            # Update sample pept_list
+            self.update_pept_list()
+
+        elif which == 'proteins':
+            pept_dict_tmp = self.pept_dict.copy()
+            for evID, pept in pept_dict_tmp.items():
+                if len(pept.proteins) == 0:
+                    self.pept_dict.pop(seq)
+            # Update sample pept_list
+            self.update_pept_list()
+
+
 
 
     def createPep2Prot(self):
@@ -127,7 +178,7 @@ class sample():
         pep2lprot = []
         pep2lrprot = []
 
-        for seq, pep in self.pept_dict.items():
+        for evID, pep in self.pept_dict.items():
             pep2prot.append(
                 [1 if prot in pep.proteins else 0
                  for prot in self.prot_list]
@@ -195,37 +246,37 @@ class sample():
         elif which == 'razor':
             W = self.pep2lrprot
 
-        Int = [pept.intensity for pept in self.peptides.values]
-        Int = np.array(Int).reshape(-1,1)
 
-
-
-        for i, seq, pept in enumerate(self.peptides.items()):
+        for i, (evID, pept) in enumerate(self.pept_dict.items()):
             if len(pept.leading_proteins) > 1 and which == 'unique':
                 # Skip peptide
                 continue
-            modified = [0 if mod[0]==mod[1] else 1 for mod in pept.modifications]
+            # Get modification status of each peptide
+            modified = [0 if mod[0]==mod[1] else 1 for mod in pept.ptms]
             pept_int = pept.intensity
             w_i = W[i,:]
             prot_sel = w_i > 0
-            w_i = w_i[prot_idx]
+            # w_i = w_i[prot_idx]
+            w_i = w_i[prot_sel]
             wint_i = pept_int * w_i
             # Get protein id to which modifications will be added
             prot_ids = self.prot_list[prot_sel]
-            for j, mod in sequence(pept.modifications):
+            for k, mod in enumerate(pept.ptms):
                 mod_id = mod[0]+str(mod[-1])
                 # Assign to the associated proteins
                 for prot_id, intw_ij in zip(prot_ids, wint_i):
                     prot = self.prot_dict[prot_id]
-                    if mod_id not in prot.modifications:
-                        prot.modifications[mod_id] = [
-                            mod[0], mod[1], mod[-1], 0, 0
+                    if mod_id not in prot.ptms:
+                        prot.ptms[mod_id] = [
+                            mod[0], mod[1], mod[-1], 0, 0, 0
                         ]
-                    prot.modifications[mod_id][modified[j]+3] += intw_ij
+                    prot.ptms[mod_id][modified[k]+4] += intw_ij
+                    if modified[k] == 1:
+                        prot.ptms[mod_id][1] = mod[1]
 
 class MQrun():
 
-    def __init__():
+    def __init__(self):
         self.samples = {}
         self.proteins = set()
 
@@ -235,14 +286,14 @@ class MQdata():
     def __init__(self, prot_f):
 
         self.mqruns = []
-        self.intensities = np.array()
+        self.intensities = np.array([])
 
         self.prot_f = prot_f
 
     def add_mqrun(self, mqrun):
         self.mqruns.append(mqrun)
 
-    def map_positions(gene, file, aamod='QN'):
+    def map_positions(self, gene, file, aamod='QN'):
 
         sequences = []
         for record in SeqIO.parse(file, "fasta"):
@@ -255,7 +306,7 @@ class MQdata():
 
         # Generate multiple alignment
         clustalw_cline = ClustalwCommandline(
-            'clustalo',
+            'clustalw2',
             infile=gene + ".fasta",
             outfile=gene + ".aln")
         clustalw_cline()
@@ -263,10 +314,10 @@ class MQdata():
         # Readm multiple alignment
         align = AlignIO.read(gene + ".aln", "clustal")
 
-        align._alphabet = ProteinAlphabet()
-        aligninfo = AlignInfo.SummaryInfo(align)
-        _ = aligninfo.information_content()
-        self.aligninfo = aligninfo
+        # align._alphabet = ProteinAlphabet()
+        # aligninfo = AlignInfo.SummaryInfo(align)
+        # _ = aligninfo.information_content()
+        # self.aligninfo = aligninfo
 
         aas = set([l for l in aamod])
         aaregex = re.compile('[' + aamod + ']')
@@ -277,30 +328,37 @@ class MQdata():
             mp = {}
             ungapped = record.seq.ungap(gap='-')
             gapped = record.seq
-            for ugp, gp in zip(aamod.finditer(str(ungapped)), aamod.finditer(str(gapped))):
-                mp[ugp.start()] = gp.start()
+            for ugp, gp in zip(aaregex.finditer(str(ungapped)), aaregex.finditer(str(gapped))):
+                mp[ugp.start()+1] = gp.start()+1
             map_positions[record.id] = mp
+        print(map_positions)
         # Correct positions
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
                 for prot_id, protein in sample.prot_dict.items():
-                    for mod_key in protein.modifications.keys():
-                        if protein.modifications[mod_key][0] in aas:
+                    for mod_key in protein.ptms.keys():
+                        if protein.ptms[mod_key][0] in aas:
                             # Adjust position
-                            protein.modifications[mod_key][2] = \
-                                map_positions[prot_id][protein.modifications[mod_key][2]]
+                            protein.ptms[mod_key][3] = \
+                                map_positions[prot_id][protein.ptms[mod_key][2]]
 
 
     def filter_species_prots(self):
         # For each sample, keep only proteins whose species are in the sample
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
-                sample.filter_prots()
+                sample.filter_species_prots()
 
-    def filter_nonassociated_peptides(self):
+    def filter_prots(self, keep_names):
+        # For each sample, keep only proteins in keep_names
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
-                sample.filter_nonassociated_peptides()
+                sample.filter_prots(keep_names)
+
+    def filter_nonassociated_peptides(self, which='razor'):
+        for mqr in self.mqruns:
+            for sample_name, sample in mqr.samples.items():
+                sample.filter_nonassociated_peptides(which)
 
     def createPep2Prot(self):
         for mqr in self.mqruns:
@@ -335,7 +393,7 @@ class MQdata():
                     sample_info = sample.info
                     sample_info['prot_id'] = prot_id
                     prot_data.append(sample_info)
-                    for mod_id, mod in protein.modifications.items():
+                    for mod_id, mod in protein.ptms.items():
                         mods_idx.append(mod_id)
                         mods_data.append(mod[0:3])
         varm = pd.DataFrame(mods_data, mods_idx).drop_duplicates()
@@ -351,10 +409,10 @@ class MQdata():
                     if protein.info['prot_name'] != prot_name:
                         continue
                     for mod_id in varsm.index:
-                        if mod_id in protein.modifications:
-                            tot_int = (protein.modifications[mod_id][3] +
-                                       protein.modifications[mod_id][4])
-                            rel_mod = protein.modifications[mod_id][4] / tot_int
+                        if mod_id in protein.ptms:
+                            tot_int = (protein.ptms[mod_id][3] +
+                                       protein.ptms[mod_id][4])
+                            rel_mod = protein.ptms[mod_id][4] / tot_int
                             m.append(rel_mod)
                             r.append(tot_int)
                         else:
