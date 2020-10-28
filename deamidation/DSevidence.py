@@ -433,7 +433,7 @@ class MQdata():
         #plot length vs intensity
         empty = np.array([True if len(v)==0 else False for v in self.intensities])
         intensities = self.intensities[~empty]
-        lengths = np.array(range(1,51))[~empty]
+        lengths = np.array(range(1,61))[~empty]
         # Calculate stats
         flat_int = np.array([i for v in intensities for i in v])
         iqr = stats.iqr(flat_int)
@@ -471,7 +471,6 @@ class MQdata():
                    marker='.', zorder=10, label='Length median')
         ax.scatter(np.arange(1, len(lengths) + 1), means, c='g', s = 35,
                    marker='.', zorder=10, label='Length mean')
-        ax.semilogy()
         plt.legend()
         plt.title('Intensity distribution by length')
 

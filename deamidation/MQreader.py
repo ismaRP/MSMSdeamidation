@@ -67,7 +67,7 @@ class evidenceBatchReader():
             if tr == 'qt':
                 self.tr = tr
                 self.tr_f = self.__qt
-            elif tr == 'lognor':
+            elif tr == 'lognorm':
                 self.tr = tr
                 self.tr_f = self.__log_norm
         elif tr in {'log'}:
@@ -157,7 +157,7 @@ class evidenceBatchReader():
         return(transformed)
 
     def __log_norm(self, x):
-        return(np.log(x/np.sum(x)+1))
+        return(np.log((x/np.sum(x))+1))
 
     def __log(self, x):
         return(np.log(x+1))
