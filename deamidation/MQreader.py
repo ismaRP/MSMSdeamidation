@@ -17,7 +17,8 @@ class evidenceBatchReader():
 
     def __init__(self, datapath, prot_f, samples_f,
                  ptm=['de'], aa=['QN'], sep='\t',
-                 tr=None, sf_exp=[], include=None, exclude=None):
+                 tr=None, int_threshold=0, sf_exp=[],
+                 include=None, exclude=None):
         """
         Include: only selected are analyzed
         Exclude: analyze all datasets but the ones set here
@@ -61,6 +62,8 @@ class evidenceBatchReader():
         self.prot_set = set(self.prot_f.index)
         self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
         self.samples_set = set(self.samples_f.index)
+
+        self.int_threshold = int_threshold
 
         if tr in {'qt','lognorm'}:
             self.per_sample_tr = True
@@ -157,7 +160,7 @@ class evidenceBatchReader():
         return(transformed)
 
     def __log_norm(self, x):
-        return(np.log((x/np.sum(x))+1))
+        return(np.log((x/np.max(x))+1))
 
     def __log(self, x):
         return(np.log(x+1))
@@ -187,7 +190,6 @@ class evidenceBatchReader():
 
                 to_transform = intensity_list[sample_start:i]
                 transformed = transform = self.tr_f(to_transform)
-
                 intensity_list[sample_start:i] = transformed
                 intensity_list.append(intensity)
 
@@ -220,6 +222,7 @@ class evidenceBatchReader():
             intensity = float(intensity) if intensity!='' else 0
             intensity_list.append(intensity)
         intensity_list = np.array(intensity_list)
+
         if self.tr is not None:
             intensity_list = self.tr_f(intensity_list)
         return(intensity_list)
@@ -282,6 +285,11 @@ class evidenceBatchReader():
         for i, line in enumerate(infile):
             line = line[:-1]
             line = line.split(self.sep)
+
+            raw_int = line[headerPos['intensity']]
+            raw_int = float(raw_int) if raw_int!='' else 0
+            if raw_int < self.int_threshold:
+                continue
 
             sample_name = line[headerPos['sample']]
             if sample_name not in self.samples_set:

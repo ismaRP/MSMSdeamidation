@@ -306,7 +306,7 @@ class MQdata():
 
         # Generate multiple alignment
         clustalw_cline = ClustalwCommandline(
-            'clustalw2',
+            'clustalo',
             infile=gene + ".fasta",
             outfile=gene + ".aln")
         clustalw_cline()
@@ -331,7 +331,7 @@ class MQdata():
             for ugp, gp in zip(aaregex.finditer(str(ungapped)), aaregex.finditer(str(gapped))):
                 mp[ugp.start()+1] = gp.start()+1
             map_positions[record.id] = mp
-        print(map_positions)
+
         # Correct positions
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
@@ -388,10 +388,10 @@ class MQdata():
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
                 for prot_id, protein in sample.prot_dict.items():
-                    if protein.info['prot_name'] != prot_name:
+                    if protein.info['protein_name'] != prot_name:
                         continue
                     sample_info = sample.info
-                    sample_info['prot_id'] = prot_id
+                    sample_info['protein_id'] = prot_id
                     prot_data.append(sample_info)
                     for mod_id, mod in protein.ptms.items():
                         mods_idx.append(mod_id)
@@ -406,13 +406,13 @@ class MQdata():
                 for prot_id, protein in sample.prot_dict.items():
                     m = []
                     r = []
-                    if protein.info['prot_name'] != prot_name:
+                    if protein.info['protein_name'] != prot_name:
                         continue
-                    for mod_id in varsm.index:
+                    for mod_id in varm.index:
                         if mod_id in protein.ptms:
-                            tot_int = (protein.ptms[mod_id][3] +
-                                       protein.ptms[mod_id][4])
-                            rel_mod = protein.ptms[mod_id][4] / tot_int
+                            tot_int = (protein.ptms[mod_id][4] +
+                                       protein.ptms[mod_id][5])
+                            rel_mod = protein.ptms[mod_id][5] / tot_int
                             m.append(rel_mod)
                             r.append(tot_int)
                         else:
@@ -424,7 +424,10 @@ class MQdata():
         R = np.array(R)
         R = R/np.sum(R,1).reshape(-1,1)
         l = {'R': R}
-        data = AnnData(M, obsm=obsm, varm=varm, layers=l)
+        print(M.shape)
+        print(R)
+        # data = AnnData(M, obsm=obsm, varm=varm, layers=l)
+        # return(data)
 
 
 

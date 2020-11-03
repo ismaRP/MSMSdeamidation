@@ -9,16 +9,16 @@ import os
 main_path = '/home/ismael/palaeoproteomics/'
 datapath = main_path + 'MSMSdatasets/'
 
-# os.system(
-#     '/home/ismael/palaeoproteomics/MSMSdeamidation/sort_evidence.sh \
-#     /home/ismael/palaeoproteomics/MSMSdatasets/ 20'
-# )
+os.system(
+    '/home/ismael/palaeoproteomics/MSMSdeamidation/sort_evidence.sh \
+    /home/ismael/palaeoproteomics/MSMSdatasets/'
+)
 
 reader = evidenceBatchReader(
     datapath,
     prot_f = datapath + 'proteins.csv',
     samples_f = datapath + 'CollagenSamples.csv',
-    ptm=['de'], aa=['QN'], tr='log', sf_exp=[])
+    ptm=['de'], aa=['QN'], tr='log', int_threshold=150, sf_exp=[])
 
 
 N_properties, Q_properties = af.readHalftimes(datapath + 'N_properties.json',
@@ -32,10 +32,12 @@ mqdata = reader.readBatch()
 
 mqdata.plot_intensities(main_path+'MSMSout/int_vs_len.png')
 
-# mqdata.filter_prots(keep_names=['COL1A1'])
-# mqdata.filter_nonassociated_peptides(which='razor')
-#
-# mqdata.createPep2Prot()
-# mqdata.assign_mod2prot(which='razor')
-#
-# mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
+mqdata.filter_prots(keep_names=['COL1A1'])
+mqdata.filter_nonassociated_peptides(which='razor')
+
+mqdata.createPep2Prot()
+mqdata.assign_mod2prot(which='razor')
+
+mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
+
+anndata = mqdata.create_pxm_matrix(prot_name='COL1A1')
