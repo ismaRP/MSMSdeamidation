@@ -38,6 +38,11 @@ mqdata.filter_nonassociated_peptides(which='razor')
 mqdata.createPep2Prot()
 mqdata.assign_mod2prot(which='razor')
 
-mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
+# mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
+mqdata.map_positions('COL1A1', alignment='COL1A1.aln')
+
+
 
 anndata = mqdata.create_pxm_matrix(prot_name='COL1A1')
+anndata = anndata[np.all(np.isnan(anndata.X), axis=1),:]
+anndata = anndata.groupby_sample()

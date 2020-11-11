@@ -344,7 +344,7 @@ class evidenceBatchReader():
             if sample_name not in mqrun.samples:
             # If new sample, create and add first peptide
                 sample_info = self.samples_f.loc[sample_name]
-                mqrun.samples[sample_name] = sample(sample_name, sample_info)
+                mqrun.samples[sample_name] = sample(sample_info)
                 mqrun.samples[sample_name].pept_dict[evidenceID] = pep
             else:
             # Else (sample already created)
