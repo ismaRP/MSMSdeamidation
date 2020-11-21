@@ -441,14 +441,12 @@ class MQdata():
 
 
     def assign_mod2prot(self, which):
-        # For each sample, assign modifications to proteins
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
                 sample.mod2prot(which)
 
 
     def create_pxm_matrix(self, prot_name):
-        # Create protein x position modifications matrix
 
         mods_idx = []
         mods_data = []
@@ -505,22 +503,22 @@ class deamidationMatrix(AnnData):
 
     def groupby_sample(self):
 
-        grouped = self.obs.drop('protein_id', 1).groupby('sample_name')
-        unique_sample = grouped.agg(lambda x: x[0]).set_index('Sample')
-        newX = np.zeros(len(grouped), self.shape[1])
-        newR = np.zeros(len(grouped), self.shape[1])
+        grouped = self.obs.drop('protein_id', 1).groupby('sample_name', as_index=True)
+        unique_sample = grouped.agg(lambda x: x[0])
+        newX = np.zeros((len(grouped), self.shape[1]))
+        newR = np.zeros((len(grouped), self.shape[1]))
         newobs = []
         X = self.X
         R = self.layers['R']
 
-        for i, (sample, idx) in enumerate(grouped.indices):
+        for i, (sample, idx) in enumerate(grouped.indices.items()):
             xs = X[idx, :]
             rs = R[idx, :]
             num = np.nansum(xs*rs, axis=0)
             den = np.nansum(rs, axis=0)
             newX[i,:] = num/den
             newR[i,:] = den
-            new_obs.append(unique_sample.loc[sample])
+            newobs.append(unique_sample.loc[sample])
         newobs = pd.concat(newobs, axis=1, ignore_index=True, sort=False).T
 
         anndata = deamidationMatrix(newX, obs=newobs, var=self.var, layers = {'R':newR})
