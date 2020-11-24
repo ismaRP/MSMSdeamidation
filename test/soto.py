@@ -18,6 +18,7 @@ reader = evidenceBatchReader(
     datapath,
     prot_f = datapath + 'proteins.csv',
     samples_f = datapath + 'CollagenSamples.csv',
+    fasta_f = '',
     ptm=['de'], aa=['QN'], tr='log', int_threshold=150, sf_exp=[])
 
 
@@ -39,7 +40,7 @@ mqdata.createPep2Prot()
 mqdata.assign_mod2prot(which='razor')
 
 # mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
-mqdata.map_positions('COL1A1', alignment='COL1A1.aln')
+mqdata.map_positions('COL1A1')
 
 
 

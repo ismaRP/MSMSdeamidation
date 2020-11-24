@@ -15,7 +15,7 @@ from deamidation.accFunctions import readHeader
 
 class evidenceBatchReader():
 
-    def __init__(self, datapath, prot_f, samples_f,
+    def __init__(self, datapath, prot_f, samples_f, fasta_f=None,
                  ptm=['de'], aa=['QN'], sep='\t',
                  tr=None, int_threshold=0, sf_exp=[],
                  include=None, exclude=None):
@@ -23,6 +23,12 @@ class evidenceBatchReader():
         Include: only selected are analyzed
         Exclude: analyze all datasets but the ones set here
         If both include and exclude are set, only include will be used.
+
+        If fasta_f is a str, it's read as a fasta file with all the sequences
+        used in all the MQ runs. If it is an empty string or the file cannot be
+        found, it will look for a fasta file within each run dataset folder.
+        The sequences are then kept either at a MQdata level or MQrun level.
+        If it's None, no sequence info is used.
 
         tr: ['qt', 'lognorm', 'log']
         """
@@ -58,10 +64,12 @@ class evidenceBatchReader():
         self.sep = sep
         self.sf_exp = sf_exp
 
+
         self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep=',')
         self.prot_set = set(self.prot_f.index)
         self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
         self.samples_set = set(self.samples_f.index)
+        self.fasta_f = fasta_f
 
         self.int_threshold = int_threshold
 
@@ -85,22 +93,40 @@ class evidenceBatchReader():
 
     def readBatch(self):
 
-        mqdata = MQdata(self.prot_f)
+        prot_seqs = self.__read_fasta()
+        mqdata = MQdata(self.prot_f, prot_seqs)
 
         intensities = [[] for i in range(60)]
         for d, p in zip(self.datasets, self.paths):
             if d in self.sf_exp:
-                mqrun, intensities = self.importEvidence(p, intensities,
+                mqrun, intensities = self.importEvidence(p, intensities, d,
                                                          sample_field='Experiment')
             else:
-                mqrun, intensities = self.importEvidence(p, intensities,
+                mqrun, intensities = self.importEvidence(p, intensities, d,
                                                          sample_field='Raw file')
             mqdata.add_mqrun(mqrun)
         intensities = np.array([np.array(v) for v in intensities])
         mqdata.intensities = intensities
 
-
         return(mqdata)
+
+
+    def __read_mqdata_fasta(self):
+        prot_seqs = None
+
+        if self.fasta_f is not None:
+            if self.fasta_f != '':
+                try:
+                    prot_seqs = {}
+                    f = open(self.fasta_f, 'r')
+                    for record in SeqIO.parse(f, 'fasta'):
+                        prot_seqs[record.id] = record
+                except FileNotFoundError:
+                    self.fasta_f = ''
+                    wmsg = 'File not found! Looking for fasta files within \n'
+                    wmsg += 'the datasets folders...'
+                    warnings.warn(wmsg)
+        return(prot_seqs)
 
     def __read_peptides(self, folder, sep='\t'):
         """
@@ -131,6 +157,21 @@ class evidenceBatchReader():
             peptides[peptideID] = [start, end, bef, aft]
         infile.close()
         return peptides
+
+
+    def __read_mqrun_fasta(self, folder):
+
+        prot_seqs = {}
+        fasta_files = [f for f in os.listdir(folder) if f.endswith('.fasta')]
+
+        if len(fasta_files) != 0:
+            for f in fasta_files:
+                with open(f, 'r') as f:
+                    for record in SeqIO.parse(f, 'fasta'):
+                        prot_seqs[record.id] = record
+        else:
+            prot_seqs = None
+        return(prot_seqs)
 
     def __getmod(self, seq, modseq, start=0):
         seq = '_' + seq + '_'
@@ -229,7 +270,7 @@ class evidenceBatchReader():
 
 
 
-    def importEvidence(self, folder, intensities=[], sample_field='Raw file'):
+    def importEvidence(self, folder, d, intensities=[], sample_field='Raw file'):
         """
         Read evidence.txt file from MaxQuant output
 
@@ -242,7 +283,14 @@ class evidenceBatchReader():
         # Read peptides.txt
         peptides = self.__read_peptides(folder)
 
-        mqrun = MQrun() # Contains samples with their peptides
+        # Read fasta
+        prot_seqs == None
+        if self.fasta_f == '':
+            prot_seqs = self.__read_mqrun_fasta(folder)
+            if prot_seqs is None:
+                warning.warn('Dataset {} does not contain any fasta file'.format(d))
+
+        mqrun = MQrun(prot_seqs, d)
 
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
@@ -332,7 +380,7 @@ class evidenceBatchReader():
             for prot_id in proteins:
                 prot_info = self.prot_f.loc[prot_id]
                 prot = protein(
-                    prot_id, prot_info,
+                    prot_id, prot_info, prot_seqs[prot_id]
                 )
                 tmp_prot[prot_id] = prot
 

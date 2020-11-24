@@ -12,7 +12,7 @@ from anndata import AnnData
 import re
 
 from Bio import SeqIO, AlignIO
-from Bio.Align.Applications import ClustalwCommandline
+from Bio.Align.Applications import ClustalOmegaCommandline
 from Bio.Align import AlignInfo
 
 class peptide():
@@ -53,7 +53,8 @@ class protein():
         self.id = id
         self.info = prot_info
 
-
+        self.sequence = record
+        # self.gapped_sequence = None
 
         self.ptms = {}
         # PTMs ids in proteins are defined by residue + global position
@@ -62,7 +63,8 @@ class protein():
         #         [
         #             residue,
         #             modification,
-        #             (mapped) position,
+        #             position,
+        #             mapped position,
         #             int_unmodified,
         #             int_modified
         #         ],
@@ -172,8 +174,6 @@ class sample():
             self.update_pept_list()
 
 
-
-
     def createPep2Prot(self):
         pep2prot = []
         pep2lprot = []
@@ -269,26 +269,28 @@ class sample():
                     prot = self.prot_dict[prot_id]
                     if mod_id not in prot.ptms:
                         prot.ptms[mod_id] = [
-                            mod[0], mod[1], mod[-1], 0, 0
+                            mod[0], mod[1], mod[-1], 0, 0, 0
                         ]
-                    prot.ptms[mod_id][modified[k]+3] += intw_ij
+                    prot.ptms[mod_id][modified[k]+4] += intw_ij
                     if modified[k] == 1:
                         prot.ptms[mod_id][1] = mod[1]
 
 class MQrun():
 
-    def __init__(self):
+    def __init__(self, prot_seqs, d):
         self.samples = {}
         self.proteins = set()
+        self.prot_seqs = prot_seqs
+        self.name = d
 
 
 class MQdata():
 
-    def __init__(self, prot_f):
+    def __init__(self, prot_f, prot_seqs):
 
         self.mqruns = []
         self.intensities = np.array([])
-
+        self.prot_seqs = prot_seqs
         self.prot_f = prot_f
 
     def add_mqrun(self, mqrun):
@@ -349,22 +351,52 @@ class MQdata():
     def map_positions(self, gene, fasta=None, alignment=None,
                       alnformat='clustal', aamod='QN'):
 
-        if fasta is not None and alignment is None:
-            sequences = []
-            for record in SeqIO.parse(fasta, "fasta"):
-                if self.prot_f.loc[record.id].protein_name == gene:
-                    sequences.append(record)
+        if alignment is None:
+            if fasta is None:
+                sequences = []
+                if self.prot_seqs is not None:
+                    # Use the sequences in MQdata
+                    for seqid, record in self.prot_seqs.items():
+                        if self.prot_f.loc[record.id].protein_name == gene:
+                            sequences.append(record)
+                else:
+                    # Collect sequences from each mqrun
+                    mqr_nonfasta = []
+                    global_prot_seqs = {}
+                    for mqr in self.mqruns:
+                        if mqr.prot_seq is None:
+                            mqr_nonfasta.append(mqr.name)
+                            continue
+                        global_prot_seqs.update(mqr.prot_seq)
+                    if len(mqr_nonfasta) > 0:
+                        w = 'The following MQ runs do not contain a fasta file:\n'
+                        w += ','.join(mqr_nonfasta)
+                        warning.warn(w)
+                    if not global_prot_seqs:
+                        errmsg = 'No FASTA found either at MQdata or MQrun level.'
+                        errmsg += '\nPlease use the fasta argument to provide it now.'
+                        sys.exit(errmsg)
+                    for seqid, record in global_prot_seqs.items():
+                        if self.prot_f.loc[record.id].protein_name == gene:
+                            sequences.append(record)
+
+            if fasta is not None:
+                sequences = []
+                for record in SeqIO.parse(fasta, "fasta"):
+                    if self.prot_f.loc[record.id].protein_name == gene:
+                        sequences.append(record)
 
             # Print fasta file with the records from specified gene
             with open(gene + ".fasta", "w") as output_handle:
                 SeqIO.write(sequences, output_handle, "fasta")
 
             # Generate multiple alignment
-            clustalw_cline = ClustalwCommandline(
+            clustalo_cline = ClustalOmegaCommandline(
                 'clustalo',
                 infile=gene + ".fasta",
+                outfmt=alnformat,
                 outfile=gene + ".aln")
-            clustalw_cline()
+            clustalo_cline()
             # Readm multiple alignment
             align = AlignIO.read(gene + ".aln", "clustal")
 
@@ -374,13 +406,9 @@ class MQdata():
             # Readm multiple alignment
             align = AlignIO.read(alignment, alnformat)
 
-        elif fasta is None and alignment is None:
-            sys.exit('Please introduce either a fasta file or a clustal alignment')
-
         # align._alphabet = ProteinAlphabet()
-        # aligninfo = AlignInfo.SummaryInfo(align)
-        # _ = aligninfo.information_content()
-        # self.aligninfo = aligninfo
+        aligninfo = AlignInfo.SummaryInfo(align)
+        self.consensus = aligninfo.gap_consensus()
 
         aas = set([l for l in aamod])
         aaregex = re.compile('[' + aamod + ']')
@@ -400,14 +428,14 @@ class MQdata():
             for sample_name, sample in mqr.samples.items():
                 for prot_id, protein in sample.prot_dict.items():
                     mapped_ptms = {}
-                    for mod_key in protein.ptms.keys():
-                        if protein.ptms[mod_key][0] in aas:
-                            pos = protein.ptms[mod_key][2]
+                    for mod_key, ptm in protein.ptms.items():
+                        if ptm[0] in aas:
+                            pos = ptm[2]
                             map_pos = map_positions[prot_id][pos]
-                            map_key = protein.ptms[mod_key][0] + str(map_pos)
+                            map_key = ptm[0] + str(map_pos)
                             # Adjust position
-                            protein.ptms[mod_key][2] = map_pos
-                            mapped_ptms[map_key] = protein.ptms[mod_key]
+                            ptm[3] = map_pos
+                            mapped_ptms[map_key] = ptm
                     # Exchange ptms for the new one with mapped positions
                     protein.ptms = mapped_ptms
 
@@ -465,7 +493,11 @@ class MQdata():
                         mods_idx.append(mod_id)
                         mods_data.append(mod[0:3])
         var = pd.DataFrame(mods_data, index=mods_idx, columns=('aa', 'mod', 'pos'))
-        var = var.groupby(var.index).agg({'aa': lambda x: x[0], 'pos': lambda x: x[0], 'mod':max})
+        var = var.groupby(var.index).agg(
+            {'aa': lambda x: x[0],
+             'pos': lambda x: x[0],
+             'mod': max}
+        )
         obs = pd.concat(prot_data, axis=1, ignore_index=True, sort=False).T
 
         M = []
