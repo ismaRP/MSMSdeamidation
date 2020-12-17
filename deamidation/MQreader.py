@@ -1,41 +1,76 @@
 import os
 import re
+import warnings
 
 from Bio import SeqIO
-from Bio.Align.Applications import ClustalwCommandline
-from Bio import AlignIO
 
 import numpy as np
-import scipy as sp
 import pandas as pd
 from sklearn.preprocessing import quantile_transform
 
-from deamidation.DSevidence import peptide, protein, sample, MQrun, MQdata
+from deamidation.DSevidence import Peptide, Protein, Sample, MQrun, MQdata
 from deamidation.accFunctions import readHeader
 
-class evidenceBatchReader():
+
+class EvidenceBatchReader():
 
     def __init__(self, datapath, prot_f, samples_f, fasta_f=None,
                  ptm=['de'], aa=['QN'], sep='\t',
                  tr=None, int_threshold=0, sf_exp=[],
                  include=None, exclude=None):
-        """
-        Include: only selected are analyzed
-        Exclude: analyze all datasets but the ones set here
-        If both include and exclude are set, only include will be used.
 
+        """
+        :param datapath: root folder containing the dataset folders with the evidence.txt and peptides.txt and
+        optionally a fasta file.
+        :type datapath: Str
+
+        :param prot_f: CSV mapping between Protein ids, as they appear in the evidence.txt and fasta and Protein names.
+        It may contain chain start to correct PTM positions.
+        :type prot_f: Str
+
+        :param samples_f: CSV sample metadata.
+        :type samples_f: Str
+
+        :param fasta_f:  global fasta file
         If fasta_f is a str, it's read as a fasta file with all the sequences
         used in all the MQ runs. If it is an empty string or the file cannot be
         found, it will look for a fasta file within each run dataset folder.
         The sequences are then kept either at a MQdata level or MQrun level.
         If it's None, no sequence info is used.
+        :type fasta_f: Str
 
-        tr: ['qt', 'lognorm', 'log']
+        :param ptm: list of ptms to analyze. Default: ['de']
+        :type ptm: List
+
+        :param aa: list of amino acids potentially containing the PTMs in ptm. Both variables must match.
+        Default: ['QN']
+        :type aa: List
+
+        :param sep: separator pf the evidence.txt and peptides.txt, which must be the same across datasets.
+        Default: "\t"
+        :type sep: Str
+
+        :param tr: intensity transformation. Use 'qt' for quantile transformation,
+        'lognorm' for taking log of the intensity and normalizing by the total, 'log' for just taking logarithms
+        :type tr: Str
+
+        :param int_threshold: peptides with intensities below are not considered
+        :type int_threshold: Float
+
+        :param sf_exp: set of datasets for which the Sample name is found in the Experiment field
+        :type sf_exp: List, Set
+
+        :param include: only selected datasets are analyzed
+        :type include: List, Set
+
+        :param exclude: analyze all datasets but the ones set here.
+        If both include and exclude are set, only include will be used.
+        :type exclude: List, Set
         """
+
         if datapath[-1] != '/':
             datapath += '/'
 
-        datasets = os.listdir(datapath)
         datasets = [name for name in os.listdir(datapath) if os.path.isdir(os.path.join(datapath, name))]
         if include is not None:
             kept_data = [d for d in datasets if d in include]
@@ -52,7 +87,7 @@ class evidenceBatchReader():
         # Build regexS to find position in seq
         regexS = '(?=(' + aalist + aa_s + aalist + '))'
         # Build regexM to find position in modseq
-        aamod = [a + mod for a,mod in zip(aa_m, ptm)]
+        aamod = [a + mod for a, mod in zip(aa_m, ptm)]
         regexM = '(' + '|'.join(aamod) + ')'
 
         # Compile regex
@@ -64,7 +99,6 @@ class evidenceBatchReader():
         self.sep = sep
         self.sf_exp = sf_exp
 
-
         self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep=',')
         self.prot_set = set(self.prot_f.index)
         self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
@@ -73,7 +107,7 @@ class evidenceBatchReader():
 
         self.int_threshold = int_threshold
 
-        if tr in {'qt','lognorm'}:
+        if tr in {'qt', 'lognorm'}:
             self.per_sample_tr = True
             if tr == 'qt':
                 self.tr = tr
@@ -90,26 +124,25 @@ class evidenceBatchReader():
             self.tr = None
             self.tr_f = None
 
-
     def readBatch(self):
 
-        prot_seqs = self.__read_fasta()
+        prot_seqs = self.__read_mqdata_fasta()
         mqdata = MQdata(self.prot_f, prot_seqs)
 
         intensities = [[] for i in range(60)]
         for d, p in zip(self.datasets, self.paths):
+            print('Reading MaxQuant run {}'.format(d))
             if d in self.sf_exp:
-                mqrun, intensities = self.importEvidence(p, intensities, d,
+                mqrun, intensities = self.importEvidence(p, d, intensities,
                                                          sample_field='Experiment')
             else:
-                mqrun, intensities = self.importEvidence(p, intensities, d,
+                mqrun, intensities = self.importEvidence(p, d, intensities,
                                                          sample_field='Raw file')
             mqdata.add_mqrun(mqrun)
         intensities = np.array([np.array(v) for v in intensities])
         mqdata.intensities = intensities
 
-        return(mqdata)
-
+        return (mqdata)
 
     def __read_mqdata_fasta(self):
         prot_seqs = None
@@ -126,13 +159,13 @@ class evidenceBatchReader():
                     wmsg = 'File not found! Looking for fasta files within \n'
                     wmsg += 'the datasets folders...'
                     warnings.warn(wmsg)
-        return(prot_seqs)
+        return (prot_seqs)
 
     def __read_peptides(self, folder, sep='\t'):
         """
         Reads peptides.txt file from MaxQuant output into a
         simple dictionary structure:
-        {peptide id: [start_position, end_position, bef, aft]}
+        {Peptide id: [start_position, end_position, bef, aft]}
         """
         peptides = {}
 
@@ -158,11 +191,10 @@ class evidenceBatchReader():
         infile.close()
         return peptides
 
-
     def __read_mqrun_fasta(self, folder):
 
         prot_seqs = {}
-        fasta_files = [f for f in os.listdir(folder) if f.endswith('.fasta')]
+        fasta_files = [folder + '/' + f for f in os.listdir(folder) if f.endswith('.fasta')]
 
         if len(fasta_files) != 0:
             for f in fasta_files:
@@ -171,7 +203,7 @@ class evidenceBatchReader():
                         prot_seqs[record.id] = record
         else:
             prot_seqs = None
-        return(prot_seqs)
+        return (prot_seqs)
 
     def __getmod(self, seq, modseq, start=0):
         seq = '_' + seq + '_'
@@ -181,32 +213,31 @@ class evidenceBatchReader():
         #         residue,
         #         modification,
         #         local position,
-        #         protein position
+        #         Protein position
         #     ],
         # ...
         # ]
-        ptms = [[s.group(3), m.group(0), s.start(3), s.start(3)+start]
-                 for s,m in zip(self.regexS.finditer(seq),
+        ptms = [[s.group(3), m.group(0), s.start(3), s.start(3) + start]
+                for s, m in zip(self.regexS.finditer(seq),
                                 self.regexM.finditer(modseq))]
-        return(ptms)
+        return (ptms)
 
-
-    def __qt(self, x):
-        transformed = quantile_transform(np.reshape(x,(-1,1)),
+    def __qt(self, x, **kwargs):
+        transformed = quantile_transform(np.reshape(x, (-1, 1)),
                                          axis=0, copy=True,
                                          n_quantiles=len(x),
                                          output_distribution='normal')
         transformed = transformed.flatten()
         transformed = transformed - np.min(transformed)
-        return(transformed)
+        return (transformed)
 
-    def __log_norm(self, x):
-        return(np.log((x/np.max(x))+1))
+    def __log_norm(self, x, **kwargs):
+        return (np.log((x / np.max(x)) + 1))
 
-    def __log(self, x):
-        return(np.log(x+1))
+    def __log(self, x, **kwargs):
+        return (np.log(x + 1))
 
-    def __tr_per_sample(self, folder, sample_field, **kargs):
+    def __tr_per_sample(self, folder, sample_field, **kwargs):
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
 
@@ -222,53 +253,49 @@ class evidenceBatchReader():
             line = line.split(self.sep)
             sample_name = line[headerPos['sample']]
             intensity = line[headerPos['intensity']]
-            intensity = float(intensity) if intensity!='' else 0
-            if sample_name == old_sample or old_sample == None:
+            intensity = float(intensity) if intensity != '' else 0
+            if sample_name == old_sample or old_sample is None:
                 intensity_list.append(intensity)
                 old_sample = sample_name
                 continue
             else:
 
                 to_transform = intensity_list[sample_start:i]
-                transformed = transform = self.tr_f(to_transform)
+                transformed = self.tr_f(to_transform)
                 intensity_list[sample_start:i] = transformed
                 intensity_list.append(intensity)
 
                 sample_start = i
                 old_sample = sample_name
         # Transform last sample
-        to_transform = intensity_list[sample_start:i+1]
-        transformed = transform = self.tr_f(to_transform)
+        to_transform = intensity_list[sample_start:i + 1]
+        transformed = self.tr_f(to_transform, kwargs)
 
-        intensity_list[sample_start:i+1] = transformed
+        intensity_list[sample_start:i + 1] = transformed
         infile.close()
-        return(intensity_list)
+        return (intensity_list)
 
-
-    def __tr_one_shot(self, folder, sample_field, **kargs):
+    def __tr_one_shot(self, folder, sample_field, **kwargs):
         infile = open(folder + '/evidence.txt', 'r')
         header = infile.readline()[:-1].split(self.sep)
 
         headerPos = readHeader(['intensity'],
                                ['Intensity'],
                                header)
-        old_sample = None
-        sample_start = 0
+
         intensity_list = []
         # Collect intensities
         for line in infile:
             line = line[:-1]
             line = line.split(self.sep)
             intensity = line[headerPos['intensity']]
-            intensity = float(intensity) if intensity!='' else 0
+            intensity = float(intensity) if intensity != '' else 0
             intensity_list.append(intensity)
         intensity_list = np.array(intensity_list)
 
         if self.tr is not None:
-            intensity_list = self.tr_f(intensity_list)
-        return(intensity_list)
-
-
+            intensity_list = self.tr_f(intensity_list, **kwargs)
+        return (intensity_list)
 
     def importEvidence(self, folder, d, intensities=[], sample_field='Raw file'):
         """
@@ -284,11 +311,11 @@ class evidenceBatchReader():
         peptides = self.__read_peptides(folder)
 
         # Read fasta
-        prot_seqs == None
+        prot_seqs = None
         if self.fasta_f == '':
             prot_seqs = self.__read_mqrun_fasta(folder)
             if prot_seqs is None:
-                warning.warn('Dataset {} does not contain any fasta file'.format(d))
+                warnings.warn('Dataset {} does not contain any fasta file'.format(d))
 
         mqrun = MQrun(prot_seqs, d)
 
@@ -320,22 +347,20 @@ class evidenceBatchReader():
             ],
             header)
 
-
         if self.tr is not None:
             if self.per_sample_tr:
                 tr_intensities = self.__tr_per_sample(folder, sample_field)
-            elif not self.per_sample_tr:
+            else:
                 tr_intensities = self.__tr_one_shot(folder, sample_field)
         else:
             tr_intensities = self.__tr_one_shot(folder, sample_field)
-
 
         for i, line in enumerate(infile):
             line = line[:-1]
             line = line.split(self.sep)
 
             raw_int = line[headerPos['intensity']]
-            raw_int = float(raw_int) if raw_int!='' else 0
+            raw_int = float(raw_int) if raw_int != '' else 0
             if raw_int < self.int_threshold:
                 continue
 
@@ -352,19 +377,19 @@ class evidenceBatchReader():
 
             peptideID = line[headerPos['peptideID']]
 
-            # Get peptide-in-protein position info
+            # Get Peptide-in-Protein position info
             start = peptides[peptideID][0]
-            start = int(start)-1 if start!='' else 0
+            start = int(start) - 1 if start != '' else 0
 
             end = peptides[peptideID][1]
-            end = int(end) if end!='' else 0
+            end = int(end) if end != '' else 0
 
             bef = peptides[peptideID][2]
-            if bef=='-' or bef=='': bef = '_'
+            if bef == '-' or bef == '': bef = '_'
             aft = peptides[peptideID][3]
-            if aft=='-' or bef=='': aft = '_'
+            if aft == '-' or bef == '': aft = '_'
 
-            intensities[len(seq)-1].append(intensity)
+            intensities[len(seq) - 1].append(intensity)
 
             proteins = line[headerPos['proteins']].split(';')
             proteins = [p for p in proteins if p in self.prot_set]
@@ -379,35 +404,34 @@ class evidenceBatchReader():
             tmp_prot = {}
             for prot_id in proteins:
                 prot_info = self.prot_f.loc[prot_id]
-                prot = protein(
-                    prot_id, prot_info, prot_seqs[prot_id]
+                prot = Protein(
+                    prot_id, prot_info
                 )
                 tmp_prot[prot_id] = prot
 
             ptms = self.__getmod(seq, modseq, start)
-            pep = peptide(peptideID, intensity, start, end, bef, aft, seq, ptms,
+            pep = Peptide(peptideID, intensity, start, end, bef, aft, seq, ptms,
                           proteins, leading_prots, leading_razor_prot)
 
-            # Fill sample and protein data
+            # Fill sample and Protein data
             if sample_name not in mqrun.samples:
-            # If new sample, create and add first peptide
+                # If new sample, create and add first Peptide
                 sample_info = self.samples_f.loc[sample_name]
-                mqrun.samples[sample_name] = sample(sample_info)
+                mqrun.samples[sample_name] = Sample(sample_info)
                 mqrun.samples[sample_name].pept_dict[evidenceID] = pep
             else:
-            # Else (sample already created)
-                # Add peptide
+                # Else (sample already created)
+                # Add Peptide
                 mqrun.samples[sample_name].pept_dict[evidenceID] = pep
 
             # Add proteins to sample
             mqrun.samples[sample_name].prot_dict.update(tmp_prot)
 
-        # Create sample protein and peptide lists
+        # Create sample Protein and Peptide lists
         for sample_name, sample_obj in mqrun.samples.items():
             sample_obj.update_prot_list()
             sample_obj.update_pept_list()
 
         infile.close()
-
 
         return mqrun, intensities

@@ -1,4 +1,4 @@
-from deamidation.MQreader import evidenceBatchReader
+from deamidation.MQreader import EvidenceBatchReader
 from deamidation.DSevidence import deamidationMatrix
 import deamidation.deamidCorr as dc
 import deamidation.accFunctions as af
@@ -39,7 +39,7 @@ key = 'Substrate'
 type = 'cat'
 
 
-reader = evidenceBatchReader(datapath, byPos=True, qt=False, sf_exp=sf_exp,
+reader = EvidenceBatchReader(datapath, byPos=True, qt=False, sf_exp=sf_exp,
                              exclude=exclude_data)
 
 data = reader.readBatch()

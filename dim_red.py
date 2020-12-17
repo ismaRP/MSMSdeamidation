@@ -1,4 +1,4 @@
-from deamidation.MQreader import evidenceBatchReader
+from deamidation.MQreader import EvidenceBatchReader
 from deamidation.DSevidence import deamidationMatrix
 import deamidation.reactionRates as rr
 from sklearn.experimental import enable_iterative_imputer
@@ -43,7 +43,7 @@ key = 'Substrate'
 type = 'cat'
 
 
-reader = evidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
+reader = EvidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
 
 data = reader.readBatch()
 

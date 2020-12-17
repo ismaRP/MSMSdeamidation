@@ -1,8 +1,5 @@
-from deamidation.MQreader import evidenceBatchReader
-from deamidation.DSevidence import deamidationMatrix
-import deamidation.reactionRates as rr
+from deamidation.MQreader import EvidenceBatchReader
 import deamidation.accFunctions as af
-import numpy as np
 import os
 
 
@@ -14,7 +11,7 @@ os.system(
     /home/ismael/palaeoproteomics/MSMSdatasets/'
 )
 
-reader = evidenceBatchReader(
+reader = EvidenceBatchReader(
     datapath,
     prot_f = datapath + 'proteins.csv',
     samples_f = datapath + 'CollagenSamples.csv',
@@ -39,11 +36,11 @@ mqdata.filter_nonassociated_peptides(which='razor')
 mqdata.createPep2Prot()
 mqdata.assign_mod2prot(which='razor')
 
+
 # mqdata.map_positions('COL1A1', datapath+'soto_parch/20200615CSCollagenMiniDB.fasta')
 mqdata.map_positions('COL1A1')
 
+anndata = mqdata.sequence_pxm_matrix(prot_name='COL1A1')
 
-
-anndata = mqdata.create_pxm_matrix(prot_name='COL1A1')
-anndata = anndata[np.all(np.isnan(anndata.X), axis=1),:]
-anndata = anndata.groupby_sample()
+# anndata = anndata[np.all(np.isnan(anndata.X), axis=1), :]
+# anndata = anndata.groupby_sample()

@@ -1,4 +1,4 @@
-from deamidation.MQreader import evidenceBatchReader
+from deamidation.MQreader import EvidenceBatchReader
 from deamidation.DSevidence import deamidationMatrix
 import deamidation.deamidCorr as dc
 import deamidation.reactionRates as rr
@@ -66,7 +66,7 @@ sampleInfo, header = af.readSampleInfo('./data/all_samples.tsv')
 # Read proteins to filter
 protsInfo = af.readProtList('./data/collagen.tsv')
 
-reader = evidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
+reader = EvidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
 
 data = reader.readBatch()
 
