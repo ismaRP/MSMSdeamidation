@@ -99,10 +99,18 @@ class EvidenceBatchReader():
         self.sep = sep
         self.sf_exp = sf_exp
 
-        self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep=',')
+        if isinstance(prot_f, str):
+            self.prot_f = pd.read_csv(prot_f, header=0, index_col=0, sep=',')
+        elif isinstance(prot_f, pd.DataFrame):
+            self.prot_f = prot_f
         self.prot_set = set(self.prot_f.index)
-        self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
+
+        if isinstance(samples_f, str):
+            self.samples_f = pd.read_csv(samples_f, header=0, index_col=0, sep=',')
+        elif isinstance(samples_f, pd.DataFrame):
+            self.samples_f = samples_f
         self.samples_set = set(self.samples_f.index)
+
         self.fasta_f = fasta_f
 
         self.int_threshold = int_threshold
