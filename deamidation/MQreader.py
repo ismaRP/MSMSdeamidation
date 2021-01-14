@@ -139,14 +139,18 @@ class EvidenceBatchReader():
 
         intensities = [[] for i in range(60)]
         for d, p in zip(self.datasets, self.paths):
-            print('Reading MaxQuant run {}'.format(d))
+            print('Reading MaxQuant run {} ...'.format(d))
             if d in self.sf_exp:
                 mqrun, intensities = self.importEvidence(p, d, intensities,
                                                          sample_field='Experiment')
             else:
                 mqrun, intensities = self.importEvidence(p, d, intensities,
                                                          sample_field='Raw file')
-            mqdata.add_mqrun(mqrun)
+            # Add mqrun only if it contains samples
+            if mqrun.samples:
+                mqdata.add_mqrun(mqrun)
+            else:
+                print('\t{} not added. All samples excluded'.format(d))
         intensities = np.array([np.array(v) for v in intensities])
         mqdata.intensities = intensities
 
@@ -323,7 +327,7 @@ class EvidenceBatchReader():
         if self.fasta_f == '':
             prot_seqs = self.__read_mqrun_fasta(folder)
             if prot_seqs is None:
-                warnings.warn('Dataset {} does not contain any fasta file'.format(d))
+                print('\t{} does not contain any fasta file'.format(d))
 
         mqrun = MQrun(prot_seqs, d)
 
@@ -375,6 +379,15 @@ class EvidenceBatchReader():
             sample_name = line[headerPos['sample']]
             if sample_name not in self.samples_set:
                 continue
+
+            proteins = line[headerPos['proteins']].split(';')
+            proteins = [p for p in proteins if p in self.prot_set]
+            if len(proteins) == 0:
+                continue
+            leading_prots = line[headerPos['leading_prots']].split(';')
+            leading_prots = [p for p in leading_prots if p in self.prot_set]
+            if len(leading_prots) == 0:
+                continue
             modseq = line[headerPos['modseq']]
             # _GAP(hy)GADGPAGAP(hy)GTP(hy)GPQ(de)GIAGQ(de)R_
             seq = line[headerPos['seq']]
@@ -399,14 +412,6 @@ class EvidenceBatchReader():
 
             intensities[len(seq) - 1].append(intensity)
 
-            proteins = line[headerPos['proteins']].split(';')
-            proteins = [p for p in proteins if p in self.prot_set]
-            if len(proteins) == 0:
-                continue
-            leading_prots = line[headerPos['leading_prots']].split(';')
-            leading_prots = [p for p in leading_prots if p in self.prot_set]
-            if len(leading_prots) == 0:
-                continue
             leading_razor_prot = line[headerPos['leading_razor_prot']]
 
             tmp_prot = {}
