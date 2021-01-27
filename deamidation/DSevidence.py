@@ -16,13 +16,13 @@ from Bio.Align import AlignInfo
 
 class Peptide:
 
-    def __init__(self, pid, intensity, start, end, bef, aft, sequence, ptms,
+    def __init__(self, pid, mass, intensity, start, end, bef, aft, sequence, ptms,
                  proteins, leading_proteins, leading_razor_protein):
         self.id = pid
         self.intensity = intensity
         self.sequence = sequence
         self.length = len(sequence)
-
+        self.mass = mass
         # Start and end position in leading razor Protein
         self.start_position = start
         self.end_position = end

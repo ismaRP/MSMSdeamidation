@@ -343,6 +343,7 @@ class EvidenceBatchReader():
                 'proteins',
                 'leading_prots',
                 'leading_razor_prot',
+                'mass',
                 'peptideID',
                 'evidenceID'
             ],
@@ -354,6 +355,7 @@ class EvidenceBatchReader():
                 'Proteins',
                 'Leading proteins',
                 'Leading razor protein',
+                'Mass',
                 'Peptide ID',
                 'id'
             ],
@@ -397,7 +399,7 @@ class EvidenceBatchReader():
             intensity = tr_intensities[i]
 
             peptideID = line[headerPos['peptideID']]
-
+            mass = line[headerPos['mass']]
             # Get Peptide-in-Protein position info
             start = peptides[peptideID][0]
             start = int(start) - 1 if start != '' else 0
@@ -423,7 +425,7 @@ class EvidenceBatchReader():
                 tmp_prot[prot_id] = prot
 
             ptms = self.__getmod(seq, modseq, start)
-            pep = Peptide(peptideID, intensity, start, end, bef, aft, seq, ptms,
+            pep = Peptide(peptideID, mass, intensity, start, end, bef, aft, seq, ptms,
                           proteins, leading_prots, leading_razor_prot)
 
             # Fill sample and Protein data
