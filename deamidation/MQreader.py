@@ -32,9 +32,7 @@ class EvidenceBatchReader():
         :type samples_f: Str
 
         :param fasta_f:  global fasta file
-        If fasta_f is a str, it's read as a fasta file with all the sequences
-        used in all the MQ runs. If it is an empty string or the file cannot be
-        found, it will look for a fasta file within each run dataset folder.
+        If it is an empty string or the file cannot be found, it will look for fasta files within each run folder.
         The sequences are then kept either at a MQdata level or MQrun level.
         If it's None, no sequence info is used.
         :type fasta_f: Str
@@ -159,18 +157,17 @@ class EvidenceBatchReader():
     def __read_mqdata_fasta(self):
         prot_seqs = None
 
-        if self.fasta_f is not None:
-            if self.fasta_f != '':
-                try:
-                    prot_seqs = {}
-                    f = open(self.fasta_f, 'r')
-                    for record in SeqIO.parse(f, 'fasta'):
-                        prot_seqs[record.id] = record
-                except FileNotFoundError:
-                    self.fasta_f = ''
-                    wmsg = 'File not found! Looking for fasta files within \n'
-                    wmsg += 'the datasets folders...'
-                    warnings.warn(wmsg)
+        if self.fasta_f is not None and self.fasta_f != '':
+            try:
+                prot_seqs = {}
+                f = open(self.fasta_f, 'r')
+                for record in SeqIO.parse(f, 'fasta'):
+                    prot_seqs[record.id] = record
+            except FileNotFoundError:
+                self.fasta_f = ''
+                wmsg = 'File not found! Looking for fasta files within \n'
+                wmsg += 'the datasets folders...'
+                warnings.warn(wmsg)
         return (prot_seqs)
 
     def __read_peptides(self, folder, sep='\t'):
@@ -323,11 +320,9 @@ class EvidenceBatchReader():
         peptides = self.__read_peptides(folder)
 
         # Read fasta
-        prot_seqs = None
-        if self.fasta_f == '':
-            prot_seqs = self.__read_mqrun_fasta(folder)
-            if prot_seqs is None:
-                print('\t{} does not contain any fasta file'.format(d))
+        prot_seqs = self.__read_mqrun_fasta(folder)
+        if prot_seqs is None:
+            print('\t{} does not contain any fasta file'.format(d))
 
         mqrun = MQrun(prot_seqs, d)
 
@@ -419,14 +414,6 @@ class EvidenceBatchReader():
 
             leading_razor_prot = line[headerPos['leading_razor_prot']]
 
-            tmp_prot = {}
-            for prot_id in proteins:
-                prot_info = self.prot_f.loc[prot_id]
-                prot = Protein(
-                    prot_id, prot_info
-                )
-                tmp_prot[prot_id] = prot
-
             ptms = self.__getmod(seq, modseq, start)
             pep = Peptide(peptideID, mass, charge, intensity, start, end, bef, aft, seq, ptms,
                           proteins, leading_prots, leading_razor_prot)
@@ -437,13 +424,27 @@ class EvidenceBatchReader():
                 sample_info = self.samples_f.loc[sample_name]
                 mqrun.samples[sample_name] = Sample(sample_info)
                 mqrun.samples[sample_name].pept_dict[evidenceID] = pep
+                tmp_prot = {}
+                for prot_id in proteins:
+                    if prot_id not in mqrun.proteins:
+                        mqrun.proteins.add(prot_id)
+                    prot_info = self.prot_f.loc[prot_id]
+                    prot = Protein(prot_id, prot_info)
+                    tmp_prot[prot_id] = prot
+                mqrun.samples[sample_name].prot_dict = tmp_prot
             else:
                 # Else (sample already created)
                 # Add Peptide
                 mqrun.samples[sample_name].pept_dict[evidenceID] = pep
-
-            # Add proteins to sample
-            mqrun.samples[sample_name].prot_dict.update(tmp_prot)
+                # Add Proteins
+                for prot_id in proteins:
+                    if prot_id not in mqrun.proteins:
+                        mqrun.proteins.add(prot_id)
+                        prot_info = self.prot_f.loc[prot_id]
+                        prot = Protein(prot_id, prot_info)
+                        mqrun.samples[sample_name].prot_dict[prot_id] = prot
+                    elif prot_id not in mqrun.samples[sample_name].prot_dict:
+                        mqrun.samples[sample_name].prot_dict[prot_id] = prot
 
         # Create sample Protein and Peptide lists
         for sample_name, sample_obj in mqrun.samples.items():

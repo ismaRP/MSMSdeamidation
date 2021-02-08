@@ -22,7 +22,7 @@ class Peptide:
         self.intensity = intensity
         self.sequence = sequence
         self.length = len(sequence)
-        self.pred_mass = mass
+        self.pred_mass = pred_mass
         self.charge = charge
         # Start and end position in leading razor Protein
         self.start_position = start
@@ -346,42 +346,57 @@ class MQdata:
         else:
             plt.show()
 
-    def map_positions(self, gene, fasta=None, alignment=None,
-                      alnformat='clustal', aamod='QN'):
+    def collect_prot_seqs(self):
+        """
+        Collect all prot_seqs at MQdata and MQrun level, keeping only proteins in the data
+        """
+        mqdata_prots = set()
+        for mqrun in self.mqruns:
+            mqdata_prots.update(mqrun.proteins)
+
+        global_prot_seqs = {}
+        # Add the sequences in MQdata if any
+        if self.prot_seqs is not None:
+            for prot_id, record in self.prot_seqs.items():
+                if prot_id in mqdata_prots:
+                    global_prot_seqs[prot_id] = record
+        # Collect sequences from each mqrun
+        mqr_nonfasta = []
+        for mqr in self.mqruns:
+            if mqr.prot_seqs is None:
+                mqr_nonfasta.append(mqr.name)
+                continue
+            for prot_id, record in mqr.prot_seqs.items():
+                if prot_id in mqdata_prots:
+                    global_prot_seqs[prot_id] = record
+
+        if len(mqr_nonfasta) > 0:
+            w = 'The following MQ runs do not contain a fasta file:\n'
+            w += ','.join(mqr_nonfasta)
+            print(w)
+        if not global_prot_seqs:
+            errmsg = 'No FASTA found either at MQdata or MQrun level.'
+            errmsg += '\nPlease use the fasta argument to provide it now.'
+            return
+        else:
+            self.prot_seqs = global_prot_seqs
+
+    def map_positions(self, fasta=None, alignment=None,
+                      alnformat='clustal', aamod='QN', return_map=False):
 
         if alignment is None:
             if fasta is None:
+                self.collect_prot_seqs()
+                # Tranform global_prot_seqs to a list of seq records
                 sequences = []
-                if self.prot_seqs is not None:
-                    # Use the sequences in MQdata
-                    for seqid, record in self.prot_seqs.items():
-                        if self.prot_f.loc[record.id].protein_name == gene:
-                            sequences.append(record)
-                else:
-                    # Collect sequences from each mqrun
-                    mqr_nonfasta = []
-                    global_prot_seqs = {}
-                    for mqr in self.mqruns:
-                        if mqr.prot_seqs is None:
-                            mqr_nonfasta.append(mqr.name)
-                            continue
-                        global_prot_seqs.update(mqr.prot_seqs)
-                    if len(mqr_nonfasta) > 0:
-                        w = 'The following MQ runs do not contain a fasta file:\n'
-                        w += ','.join(mqr_nonfasta)
-                        warnings.warn(w)
-                    if not global_prot_seqs:
-                        errmsg = 'No FASTA found either at MQdata or MQrun level.'
-                        errmsg += '\nPlease use the fasta argument to provide it now.'
-                        sys.exit(errmsg)
-                    for seqid, record in global_prot_seqs.items():
-                        if self.prot_f.loc[record.id].protein_name == gene:
-                            sequences.append(record)
+                for seqid, record in self.prot_seqs.items():
+                    if self.prot_f.loc[record.id].protein_name in gene:
+                        sequences.append(record)
 
             else:
                 sequences = []
                 for record in SeqIO.parse(fasta, "fasta"):
-                    if self.prot_f.loc[record.id].protein_name == gene:
+                    if self.prot_f.loc[record.id].protein_name in gene:
                         sequences.append(record)
 
             # Print fasta file with the records from specified gene
@@ -402,7 +417,7 @@ class MQdata:
 
         else:
             if fasta is not None:
-                warnings.warn('Importing alignment directly')
+                warnings.warn('Importing alignment directly...')
             # Readm multiple alignment
             align = AlignIO.read(alignment, alnformat)
 
@@ -444,6 +459,9 @@ class MQdata:
                             mapped_ptms[map_key] = ptm
                     # Exchange ptms for the new one with mapped positions
                     protein.ptms = mapped_ptms
+
+        if return_map:
+            return map_positions
 
     def filter_species_prots(self):
         # For each sample, keep only proteins whose species are in the sample
