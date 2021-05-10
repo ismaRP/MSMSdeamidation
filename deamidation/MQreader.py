@@ -444,6 +444,8 @@ class EvidenceBatchReader():
                         prot = Protein(prot_id, prot_info)
                         mqrun.samples[sample_name].prot_dict[prot_id] = prot
                     elif prot_id not in mqrun.samples[sample_name].prot_dict:
+                        prot_info = self.prot_f.loc[prot_id]
+                        prot = Protein(prot_id, prot_info)
                         mqrun.samples[sample_name].prot_dict[prot_id] = prot
 
         # Create sample Protein and Peptide lists

@@ -126,7 +126,7 @@ class Sample:
             prot_n = prot.info.protein_name
             if prot_n not in keep_names:
                 # Remove Protein from sample
-                self.prot_dict.pop(prot_id)
+                _ = self.prot_dict.pop(prot_id)
                 # Go through peptides and remove Protein
                 for evID, pept in self.pept_dict.items():
                     if prot_id == pept.leading_razor_protein:
@@ -140,6 +140,7 @@ class Sample:
                         pept.proteins.remove(prot_id)
         # Update sample prot_list
         self.update_prot_list()
+        self.update_pept_list()
 
     def filter_nonassociated_peptides(self, which='razor'):
         """
@@ -174,8 +175,10 @@ class Sample:
         pep2prot = []
         pep2lprot = []
         pep2lrprot = []
-
-        for evID, pep in self.pept_dict.items():
+        self.update_pept_list()
+        self.update_prot_list()
+        for pept_id in self.pept_list:
+            pep = self.pept_dict[pept_id]
             pep2prot.append(
                 [1 if prot in pep.proteins else 0
                  for prot in self.prot_list]
@@ -231,13 +234,12 @@ class Sample:
             razor: use razor proteins
             weights: use leading proteins using association weights
         """
-
+        self.update_pept_list()
+        self.update_prot_list()
         if which == 'unique':
             W = self.pep2lprot
         elif which == 'weights':
             if self.peptide_weights is None:
-                self.update_pept_list()
-                self.update_prot_list()
                 self.pep2prot_w('pep2lprot')
             W = self.peptide_weights
         elif which == 'razor':
@@ -266,7 +268,7 @@ class Sample:
                     prot = self.prot_dict[prot_id]
                     if mod_id not in prot.ptms:
                         prot.ptms[mod_id] = [
-                            mod[0], mod[1], mod[-1], 0, 0, 0
+                            mod[0], mod[1], mod[-1], -1, 0, 0
                         ]
                     prot.ptms[mod_id][modified[k] + 4] += intw_ij
                     if modified[k] == 1:
@@ -346,20 +348,24 @@ class MQdata:
         else:
             plt.show()
 
-    def collect_prot_seqs(self):
+    def collect_prot_seqs(self, exclude_nonused=True):
         """
         Collect all prot_seqs at MQdata and MQrun level, keeping only proteins in the data
         """
         mqdata_prots = set()
-        for mqrun in self.mqruns:
-            mqdata_prots.update(mqrun.proteins)
+        if exclude_nonused:
+            for mqrun in self.mqruns:
+                mqdata_prots.update(mqrun.proteins)
 
         global_prot_seqs = {}
         # Add the sequences in MQdata if any
         if self.prot_seqs is not None:
             for prot_id, record in self.prot_seqs.items():
-                if prot_id in mqdata_prots:
+                if not exclude_nonused:
                     global_prot_seqs[prot_id] = record
+                else:
+                    if prot_id in mqdata_prots:
+                        global_prot_seqs[prot_id] = record
         # Collect sequences from each mqrun
         mqr_nonfasta = []
         for mqr in self.mqruns:
@@ -367,8 +373,11 @@ class MQdata:
                 mqr_nonfasta.append(mqr.name)
                 continue
             for prot_id, record in mqr.prot_seqs.items():
-                if prot_id in mqdata_prots:
+                if not exclude_nonused:
                     global_prot_seqs[prot_id] = record
+                else:
+                    if prot_id in mqdata_prots:
+                        global_prot_seqs[prot_id] = record
 
         if len(mqr_nonfasta) > 0:
             w = 'The following MQ runs do not contain a fasta file:\n'
@@ -381,18 +390,16 @@ class MQdata:
         else:
             self.prot_seqs = global_prot_seqs
 
-    def map_positions(self, fasta=None, alignment=None,
-                      alnformat='clustal', aamod='QN', return_map=False):
-
+    def map_positions(self, gene, fasta=None, alignment=None, alnformat='clustal',
+                      aamod='QN', return_map=False, exclude_nonused=True):
         if alignment is None:
             if fasta is None:
-                self.collect_prot_seqs()
+                self.collect_prot_seqs(exclude_nonused)
                 # Tranform global_prot_seqs to a list of seq records
                 sequences = []
                 for seqid, record in self.prot_seqs.items():
                     if self.prot_f.loc[record.id].protein_name in gene:
                         sequences.append(record)
-
             else:
                 sequences = []
                 for record in SeqIO.parse(fasta, "fasta"):
@@ -400,20 +407,20 @@ class MQdata:
                         sequences.append(record)
 
             # Print fasta file with the records from specified gene
-            with open(gene + ".fasta", "w") as output_handle:
+            with open('_'.join(gene) + ".fasta", "w") as output_handle:
                 SeqIO.write(sequences, output_handle, "fasta")
 
             # Generate multiple alignment
             clustalo_cline = ClustalOmegaCommandline(
                 'clustalo',
-                infile=gene + ".fasta",
+                infile='_'.join(gene) + ".fasta",
                 outfmt=alnformat,
-                outfile=gene + ".aln",
+                outfile='_'.join(gene) + ".aln",
                 force=True
             )
             clustalo_cline()
             # Readm multiple alignment
-            align = AlignIO.read(gene + ".aln", "clustal")
+            align = AlignIO.read('_'.join(gene) + ".aln", "clustal")
 
         else:
             if fasta is not None:
@@ -443,7 +450,7 @@ class MQdata:
             for ugp, gp in zip(aaregex.finditer(str(ungapped)), aaregex.finditer(str(gapped))):
                 mp[ugp.start() + 1] = gp.start() + 1
             map_positions[record.id] = mp
-
+        # print(map_positions['sp|P02453|CO1A1_BOVIN'][1064])
         # Correct positions
         for mqr in self.mqruns:
             for sample_name, sample in mqr.samples.items():
