@@ -175,7 +175,7 @@ def readProtList(path):
                 continue
             line = line.split('\t')
             ch1_start = int(line[2]) if line[2]!='NA' else 1
-            ch2_start = int(line[3]) if line[3]!='NA' else line[3]
+            ch2_start = int(line[3]) if line[3]!='NA' else np.inf
             proteins[line[0]]=[line[1], ch1_start, ch2_start]
         return(proteins)
 
@@ -219,7 +219,7 @@ def pca(data, k, inv=False):
     # Sort eigenvectors
     sorted_evecs = evecs[:,e_index]
     if inv:
-        sorted_evecs = sorted_evecs * - 1
+        sorted_evecs = sorted_evecs * (-1)
     # Take first k eigenvectors
     evecs_red = sorted_evecs[:,0:k]
     # Change basis, using eigenvectors

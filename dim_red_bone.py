@@ -11,7 +11,7 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 
-plt.style.use('ggplot')
+plt.style.use('seaborn-deep')
 
 def sort_by_lambda(properties, deamid_mat):
     lambdas = np.array([properties[trp]['lambda'] if trp in properties else -1
@@ -22,22 +22,22 @@ def sort_by_lambda(properties, deamid_mat):
     return deamid_mat, lambdas
 
 
-main_path = '/home/ismael/palaeoproteomics/'
+main_path = '/home/ismael/palaeoproteomics/MSMSdatasets/'
 # Read radio carbon data
 # sampleInfo, header = af.readSampleInfo(main_path+'data/all_samples.tsv')
-sampleInfo, header = af.readSampleInfo(main_path+'data/tarseep_bone_dentalcalc_samples.tsv')
+sampleInfo, header = af.readSampleInfo(main_path+'tarseep_bone_dentalcalc_samples.tsv')
 
 # Read proteins to filter
-protsInfo = af.readProtList(main_path+'data/collagen.tsv')
+protsInfo = af.readProtList(main_path+'collagen.tsv')
 # Read halftimes and properties
-N_properties, Q_properties = af.readHalftimes(main_path+'data/N_properties.json',
-                                              main_path+'data/Q_properties.json')
+N_properties, Q_properties = af.readHalftimes(main_path+'N_properties.json',
+                                              main_path+'Q_properties.json')
 aa_properties = N_properties.copy()
 aa_properties.update(Q_properties)
 
-datapath = main_path+'datasets'
+datapath = main_path + 'mq'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
-out_dir = main_path+'/out/'
+out_dir = main_path + '/out/'
 base_name = 'logtr_bone'
 
 key = 'Substrate'
@@ -53,7 +53,6 @@ sampleTripeps = data.get_sampleTripeps(sampleInfo, protsInfo, norm_type='simple'
 
 deamid_mat = deamidationMatrix(sampleTripeps, sampleInfo, header)
 
-
 sums = np.sum(deamid_mat.counts, axis=0)
 maxs = np.max(deamid_mat.counts, axis=0)
 max_cond = maxs > 8
@@ -66,13 +65,13 @@ deamid_mat = deamid_mat.filter_tripeps(tripep_mask)
 merged_deamid_mat = deamid_mat.merge_by_tripep()
 # merged_deamid_mat = merged_deamid_mat.filter_tripeps(merged_deamid_mat.filter_by_pwcounts())
 
-
 # Filter out pompeii samples
 pompeii_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii'}
+# pompeii_samples = {}
 filter = [False if d in pompeii_samples else True
-          for d in merged_deamid_mat.Ydata['Dataset']]
+          for d in deamid_mat.Ydata['Dataset']]
 
-merged_deamid_mat = merged_deamid_mat.filter_samples(filter)
+deamid_mat = deamid_mat.filter_samples(filter)
 
 # man_rm = ['MQG', 'HQG', 'PQL', 'DNG', 'GQH', 'GNN', 'NNG']
 # man_filter = [True if trp not in man_rm else False
@@ -163,8 +162,11 @@ for i,trp in enumerate(merged_deamid_mat.trps_data['tripep']):
                  sorted_evecs[i,1] * 1.1 * np.sqrt(sorted_evals[1]),
                  trp,  color = 'black', ha = 'center', va = 'center',
                  fontsize=8)
-    axes[0].set_xlim(-0.05, 0.4)
-    axes[0].set_ylim(-0.15, 0.3)
+tmp_sorted_evecs = np.vstack((sorted_evecs, np.zeros((1,5)))) # Ensure 0,0 appears in the plot
+axes[0].set_xlim(np.min(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))-0.1,
+                 np.max(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))+0.1)
+axes[0].set_ylim(np.min(tmp_sorted_evecs[:,1]*np.sqrt(sorted_evals[1]))-0.1,
+                 np.max(tmp_sorted_evecs[:,1]*np.sqrt(sorted_evals[1]))+0.1)
 axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
                size='x-large')
 axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
@@ -179,8 +181,10 @@ for i,trp in enumerate(merged_deamid_mat.trps_data['tripep']):
                  sorted_evecs[i,2] * 1.1 * np.sqrt(sorted_evals[2]),
                  trp, color = 'black', ha = 'center', va = 'center',
                  fontsize=8)
-    axes[1].set_xlim(-0.05, 0.4)
-    axes[1].set_ylim(-0.15, 0.3)
+axes[1].set_xlim(np.min(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))-0.1,
+                 np.max(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))+0.1)
+axes[1].set_ylim(np.min(tmp_sorted_evecs[:,2]*np.sqrt(sorted_evals[2]))-0.1,
+                 np.max(tmp_sorted_evecs[:,2]*np.sqrt(sorted_evals[2]))+0.1)
 axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
                size='x-large')
 axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
@@ -303,18 +307,18 @@ X = np.hstack((np.ones((X.shape[0],1)), X))
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.scatter(X[:,1],Y)
-plt.show()
-
+# plt.show()
+plt.close()
 fig = plt.figure()
 ax = fig.add_subplot(111)
 ax.scatter(X[:,2],Y)
-plt.show()
-
+# plt.show()
+plt.close()
 # reg = linear_model.LinearRegression()
 # reg.fit(X, Y)
 #
 # print(reg.score(X,Y))
-exit()
+
 # -------------------------------------------------------------------
 # COMBO PCA PLOT
 

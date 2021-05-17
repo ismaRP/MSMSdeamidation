@@ -19,7 +19,7 @@ class evidenceBatchReader():
         """
         if datapath[-1] != '/':
             datapath += '/'
-        datasets = os.listdir(datapath)
+        datasets = [d for d in os.listdir(datapath) if os.path.isdir(os.path.join(datapath, d))]
         if include is not None:
             kept_data = [d for d in datasets if d in include]
         elif exclude is not None:

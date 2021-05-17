@@ -10,8 +10,9 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
+import sys
 
-plt.style.use('ggplot')
+plt.style.use('seaborn-deep')
 
 def sort_by_lambda(properties, deamid_mat):
     lambdas = np.array([properties[trp]['lambda'] if trp in properties else -1
@@ -22,28 +23,29 @@ def sort_by_lambda(properties, deamid_mat):
     return deamid_mat, lambdas
 
 
-main_path = '/home/ismael/palaeoproteomics/'
+main_path = '/home/ismael/palaeoproteomics/MSMSdatasets/'
 # Read radio carbon data
-sampleInfo, header = af.readSampleInfo(main_path+'data/all_samples.tsv')
+sampleInfo, header = af.readSampleInfo(main_path+'all_samples.tsv')
 
 # Read proteins to filter
-protsInfo = af.readProtList(main_path+'data/collagen.tsv')
+protsInfo = af.readProtList(main_path+'collagen.tsv')
 # Read halftimes and properties
-N_properties, Q_properties = af.readHalftimes(main_path+'data/N_properties.json',
-                                              main_path+'data/Q_properties.json')
+N_properties, Q_properties = af.readHalftimes(main_path+'N_properties.json',
+                                              main_path+'Q_properties.json')
 aa_properties = N_properties.copy()
 aa_properties.update(Q_properties)
 
-datapath = main_path+'datasets'
+datapath = main_path + 'mq'
 sf_exp = {'pompeii_cph', 'pompeii2_cph'}
-out_dir = main_path+'/out/'
-base_name = 'logtr_nopompeii'
+out_dir = main_path + '/out/'
+base_name = 'logtr'
 
 key = 'Substrate'
 type = 'cat'
 
-
-reader = evidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp)
+exclude = {'20200825_IR_ParchMammal', '20201228_IR_ParchOxi', 'gigantopithecus', 'gelatin_fish',
+           'control_cleland', 'control_leakey', 'control_pnas', 'control_rakai' }
+reader = evidenceBatchReader(datapath, byPos=True, tr='log', sf_exp=sf_exp, exclude=exclude)
 
 data = reader.readBatch()
 
@@ -53,11 +55,12 @@ sampleTripeps = data.get_sampleTripeps(sampleInfo, protsInfo, norm_type='simple'
 deamid_mat = deamidationMatrix(sampleTripeps, sampleInfo, header)
 
 # Filter out pompeii samples
-remove_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii', 'gelatine fish'}
+# remove_samples = {'pompeii cph', 'pompeii2 cph', 'big pompeii'}
+remove_samples = {}
 filter = [False if d in remove_samples else True
-          for d in deamid_mat.Ydata['Dataset']]
-
+                  for d in deamid_mat.Ydata['Dataset']]
 deamid_mat = deamid_mat.filter_samples(filter)
+
 
 sums = np.sum(deamid_mat.counts, axis=0)
 maxs = np.max(deamid_mat.counts, axis=0)
@@ -73,21 +76,21 @@ print(
     np.sort(deamid_mat.trps_data,
     order=['tripep', 'prot_name', 'corr_pos'])[['tripep','corr_pos','prot_name']]
 )
-exit()
+
 
 merged_deamid_mat = deamid_mat.merge_by_tripep()
 # merged_deamid_mat = merged_deamid_mat.filter_tripeps(merged_deamid_mat.filter_by_pwcounts())
 
 
-# man_rm = ['MQG', 'HQG', 'PQL', 'DNG', 'GQH', 'GNN', 'NNG']
-# man_filter = [True if trp not in man_rm else False
-#               for trp in merged_deamid_mat.trps_data['tripep']]
-# merged_deamid_mat = merged_deamid_mat.filter_tripeps(man_filter)
 influx, prop_missing = merged_deamid_mat.influx()
 influx_filter = influx > 0.5
 prop_missing_filter = prop_missing < 0.6
 merged_deamid_mat = merged_deamid_mat.filter_tripeps(prop_missing_filter)
 
+man_rm = ['MQG', 'HQG', 'PQL', 'DNG', 'GQH', 'GNN', 'NNG', 'GNS', 'SQG']
+man_filter = [True if trp not in man_rm else False
+              for trp in merged_deamid_mat.trps_data['tripep']]
+merged_deamid_mat = merged_deamid_mat.filter_tripeps(man_filter)
 
 # Split
 Qfilter = [True if trp[1]=='Q' else False
@@ -115,7 +118,7 @@ dataR_Q = rr.calc_Ri(
     deamid_matQ.counts,
     low_counts=4,
     log_tr=True,
-    num_tol=0
+    num_tol=0.
 )
 
 argsortN = np.argsort([np.median(v) for v in dataR_N])
@@ -164,34 +167,60 @@ for i,trp in enumerate(merged_deamid_mat.trps_data['tripep']):
                   sorted_evecs[i,0]*np.sqrt(sorted_evals[0]),
                   sorted_evecs[i,1]*np.sqrt(sorted_evals[1]),
                   color = 'g', alpha=0.7)
-    axes[0].text(sorted_evecs[i,0] * 1.1 * np.sqrt(sorted_evals[0]),
-                 sorted_evecs[i,1] * 1.1 * np.sqrt(sorted_evals[1]),
-                 trp,  color = 'black', ha = 'center', va = 'center',
-                 fontsize=8)
-    axes[0].set_xlim(-0.05, 0.4)
-    axes[0].set_ylim(-0.15, 0.3)
-axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='x-large')
-axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-               size='x-large')
+
+tmp_sorted_evecs = np.vstack((sorted_evecs, np.zeros((1,5)))) # Ensure 0,0 appears in the plot
+axes[0].set_xlim(np.min(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))-0.1,
+                 np.max(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))+0.1)
+axes[0].set_ylim(np.min(tmp_sorted_evecs[:,1]*np.sqrt(sorted_evals[1]))-0.1,
+                 np.max(tmp_sorted_evecs[:,1]*np.sqrt(sorted_evals[1]))+0.1)
+# axes[0].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+#                size='x-large')
+# axes[0].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
+#                size='x-large')
+axes[0].set_xlabel('PC1', size='x-large')
+axes[0].set_ylabel('PC2', size='x-large')
+# axes[0].hlines(0, -1, 1, 'black')
+# axes[0].vlines(0, -1, 1, 'black')
+# axes[0].get_xaxis().set_visible(False)
+# axes[0].get_yaxis().set_visible(False)
 
 for i,trp in enumerate(merged_deamid_mat.trps_data['tripep']):
     axes[1].arrow(0, 0,
                   sorted_evecs[i,0]*np.sqrt(sorted_evals[0]),
                   sorted_evecs[i,2]*np.sqrt(sorted_evals[2]),
                   color = 'g', alpha=0.7)
+
+axes[1].set_xlim(np.min(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))-0.1,
+                 np.max(tmp_sorted_evecs[:,0]*np.sqrt(sorted_evals[0]))+0.1)
+axes[1].set_ylim(np.min(tmp_sorted_evecs[:,2]*np.sqrt(sorted_evals[2]))-0.1,
+                 np.max(tmp_sorted_evecs[:,2]*np.sqrt(sorted_evals[2]))+0.1)
+# axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+#                size='x-large')
+# axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
+#                size='x-large')
+axes[1].set_xlabel('PC1', size='x-large')
+axes[1].set_ylabel('PC3', size='x-large')
+# axes[1].hlines(0, -1, 1, 'black')
+# axes[1].vlines(0, -1, 1, 'black')
+# axes[1].get_xaxis().set_visible(False)
+# axes[1].get_yaxis().set_visible(False)
+
+fig.savefig(out_dir + base_name + '_eigenvectors_nolabels.png', format='png')
+
+for i,trp in enumerate(merged_deamid_mat.trps_data['tripep']):
+    axes[0].text(sorted_evecs[i,0] * 1.1 * np.sqrt(sorted_evals[0]),
+                 sorted_evecs[i,1] * 1.1 * np.sqrt(sorted_evals[1]),
+                 trp,  color = 'black', ha = 'center', va = 'center',
+                 fontsize=8)
     axes[1].text(sorted_evecs[i,0] * 1.1 * np.sqrt(sorted_evals[0]),
                  sorted_evecs[i,2] * 1.1 * np.sqrt(sorted_evals[2]),
                  trp, color = 'black', ha = 'center', va = 'center',
                  fontsize=8)
-    axes[1].set_xlim(-0.05, 0.4)
-    axes[1].set_ylim(-0.15, 0.3)
-axes[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
-               size='x-large')
-axes[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
-               size='x-large')
-plt.savefig(out_dir + base_name + '_eigenvectors.png', format='png')
+
+fig.savefig(out_dir + base_name + '_eigenvectors.png', format='png')
+
 plt.close()
+
 # Extract loadings for the first 5 PCs and
 # for N and Q tripeps in the right order
 Npos = np.array([
@@ -269,8 +298,6 @@ plt.close()
 R_Qfig.savefig(out_dir + base_name + '_loadings_Ri_Q.svg', format='svg')
 plt.close()
 
-
-
 # -------------------------------------------------------------------
 # PCA PLOTS AND REGRESSION
 
@@ -305,7 +332,7 @@ known_ages = ages_b != -1
 known_thermal_ages = thermal_ages_b != -1
 
 ages_b[known_ages] = np.log(ages_b[known_ages]+1)
-thermal_ages_b[known_thermal_ages] = np.log(thermal_ages_b[known_thermal_ages]+1)
+thermal_ages_b[known_thermal_ages] = np.log10(thermal_ages_b[known_thermal_ages]+1)
 
 # Age map color
 htcm = plt.get_cmap("cool")
@@ -525,7 +552,7 @@ print('Plotting bone samples by thermal ages')
 fig1, axes1 = plt.subplots(nrows=1, ncols=2, figsize=(15,7.5), dpi=300)
 
 # PC1 and PC2 vs age, color and shape by substrate
-fig2, axes2 = plt.subplots(nrows=2, ncols=1, figsize=(12,12), dpi=300)
+fig2, axes2 = plt.subplots(nrows=1, ncols=1, figsize=(12,7), dpi=300)
 
 bone_samples = ['Bone', 'Tar seep bone', 'Dental calculus']
 markers =  ['.', '^', 'X']
@@ -553,14 +580,12 @@ for s, m in zip(bone_samples, markers):
                      c=thermal_age_sm.to_rgba(ages_s[known_s]),
                      alpha=0.9, s=80, marker=m, label=s)
     # Plot PCs vs age
-    axes2[0].scatter(ages_s[known_s], D_s[known_s,0], s=100,
+    axes2.scatter(ages_s[known_s], -1*D_s[known_s,0], s=100,
                      marker=m, alpha=0.9, label=s)
-    axes2[1].scatter(ages_s[known_s], D_s[known_s,1], s=100,
-                     marker=m, alpha=0.9)
 
 # Legends
 axes1[1].legend(fontsize = 'xx-large')
-axes2[0].legend(fontsize='xx-large')
+axes2.legend(fontsize='xx-large')
 # bbox_to_anchor=(1.13, 1.17)
 htcbar_ax = fig1.add_axes([0.3, 0.93, 0.4, 0.015])
 htcbar = plt.colorbar(thermal_age_sm, cax=htcbar_ax, orientation="horizontal")
@@ -577,24 +602,21 @@ axes1[1].set_xlabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorte
 axes1[1].set_ylabel('PC3. {:03.2f}% var'.format(sorted_evals[2]*100/np.sum(sorted_evals)),
                size='xx-large')
 
-axes2[0].set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
+axes2.set_ylabel('PC1. {:03.2f}% var'.format(sorted_evals[0]*100/np.sum(sorted_evals)),
                     size='xx-large')
-axes2[1].set_ylabel('PC2. {:03.2f}% var'.format(sorted_evals[1]*100/np.sum(sorted_evals)),
-                    size='xx-large')
-axes2[1].set_xlabel(r"$\log(10C\: Thermal\: age + 1)$", size='xx-large')
+axes2.set_xlabel(r"$\log10(10C\: Thermal\: age + 1)$", size='xx-large')
 
 # Revert y axes in pc vs age
-axes2[0].set_ylim(axes2[0].get_ylim()[::-1])
-axes2[1].set_ylim(axes2[1].get_ylim()[::-1])
+axes2.set_ylim(axes2.get_ylim()[::-1])
 
-for ax1, ax2 in zip(axes1, axes2):
+for ax1 in axes1:
     ax1.grid(False)
     ax1.tick_params(labelsize='xx-large', length=4)
-    ax2.grid(False)
-    ax2.tick_params(labelsize='xx-large', length=4)
+axes2.grid(False)
+axes2.tick_params(labelsize='xx-large', length=4)
 fig1.set_tight_layout(True)
 fig2.set_tight_layout(True)
 fig1.savefig(out_dir + base_name + '_PCA_ThermalAge_bone_tarseep.png', format='png')
 plt.close()
-fig2.savefig(out_dir + base_name + '_PC_1_2_ThermalAge_bone_tarseep.png', format='png')
+fig2.savefig(out_dir + base_name + '_PC_1_ThermalAge_bone_tarseep.png', format='png')
 plt.close()
