@@ -66,7 +66,7 @@ def show_graph_with_labels(corr_mat, th, trps, halftimes, prop=None,
     gr = nx.Graph()
     gr.add_edges_from(edges)
 
-    edges, corrs = zip(*nx.get_edge_attributes(gr,'corr').items())
+    edges, corrs = zip(*nx.get_edge_attributes(gr, 'corr').items())
     corrs = np.array(corrs)
     if prop == None:
         pos = nx.kamada_kawai_layout(gr, weight='corr')
@@ -83,7 +83,7 @@ def show_graph_with_labels(corr_mat, th, trps, halftimes, prop=None,
     nodesm.set_array([])
 
     low_lim = np.min(corrs)
-    max_lim = np.max(corrs[corrs<1.0])
+    max_lim = np.max(corrs[corrs < 1.0])
     edge_cmap = plt.cm.Greys
     edgenorm = plt.Normalize(low_lim, max_lim)
     edgesm = ScalarMappable(norm=edgenorm, cmap=edge_cmap)

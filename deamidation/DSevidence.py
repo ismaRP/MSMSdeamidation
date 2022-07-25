@@ -130,7 +130,7 @@ class Sample:
                 # Go through peptides and remove Protein
                 for evID, pept in self.pept_dict.items():
                     if prot_id == pept.leading_razor_protein:
-                        pept.leading_razor_protein == None
+                        pept.leading_razor_protein = None
                         pept.proteins.remove(prot_id)
                         pept.leading_proteins.remove(prot_id)
                     if prot_id in pept.leading_proteins:

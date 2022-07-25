@@ -12,7 +12,7 @@ from deamidation.DSevidence import Peptide, Protein, Sample, MQrun, MQdata
 from deamidation.accFunctions import readHeader
 
 
-class EvidenceBatchReader():
+class EvidenceBatchReader:
 
     def __init__(self, datapath, prot_f, samples_f, fasta_f=None,
                  ptm=['de'], aa=['QN'], sep='\t',
@@ -131,7 +131,6 @@ class EvidenceBatchReader():
             self.tr_f = None
 
     def readBatch(self):
-
         prot_seqs = self.__read_mqdata_fasta()
         mqdata = MQdata(self.prot_f, prot_seqs)
 
@@ -152,7 +151,8 @@ class EvidenceBatchReader():
         intensities = np.array([np.array(v) for v in intensities])
         mqdata.intensities = intensities
 
-        return (mqdata)
+        return mqdata
+
 
     def __read_mqdata_fasta(self):
         prot_seqs = None
@@ -168,7 +168,7 @@ class EvidenceBatchReader():
                 wmsg = 'File not found! Looking for fasta files within \n'
                 wmsg += 'the datasets folders...'
                 warnings.warn(wmsg)
-        return (prot_seqs)
+        return prot_seqs
 
     def __read_peptides(self, folder, sep='\t'):
         """
@@ -207,12 +207,12 @@ class EvidenceBatchReader():
 
         if len(fasta_files) != 0:
             for f in fasta_files:
-                with open(f, 'r') as f:
-                    for record in SeqIO.parse(f, 'fasta'):
+                with open(f, 'r') as fh:
+                    for record in SeqIO.parse(fh, 'fasta'):
                         prot_seqs[record.id] = record
         else:
             prot_seqs = None
-        return (prot_seqs)
+        return prot_seqs
 
     def __getmod(self, seq, modseq, start=0):
         seq = '_' + seq + '_'
@@ -229,7 +229,7 @@ class EvidenceBatchReader():
         ptms = [[s.group(3), m.group(0), s.start(3), s.start(3) + start]
                 for s, m in zip(self.regexS.finditer(seq),
                                 self.regexM.finditer(modseq))]
-        return (ptms)
+        return ptms
 
     def __qt(self, x, **kwargs):
         transformed = quantile_transform(np.reshape(x, (-1, 1)),
@@ -238,13 +238,13 @@ class EvidenceBatchReader():
                                          output_distribution='normal')
         transformed = transformed.flatten()
         transformed = transformed - np.min(transformed)
-        return (transformed)
+        return transformed
 
     def __log_norm(self, x, **kwargs):
-        return (np.log((x / np.max(x)) + 1))
+        return np.log((x / np.max(x)) + 1)
 
     def __log(self, x, **kwargs):
-        return (np.log(x + 1))
+        return np.log(x + 1)
 
     def __tr_per_sample(self, folder, sample_field, **kwargs):
         infile = open(folder + '/evidence.txt', 'r')
@@ -282,7 +282,7 @@ class EvidenceBatchReader():
 
         intensity_list[sample_start:i + 1] = transformed
         infile.close()
-        return (intensity_list)
+        return intensity_list
 
     def __tr_one_shot(self, folder, sample_field, **kwargs):
         infile = open(folder + '/evidence.txt', 'r')
@@ -304,7 +304,7 @@ class EvidenceBatchReader():
 
         if self.tr is not None:
             intensity_list = self.tr_f(intensity_list, **kwargs)
-        return (intensity_list)
+        return intensity_list
 
     def importEvidence(self, folder, d, intensities=[], sample_field='Raw file'):
         """
